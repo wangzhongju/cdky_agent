@@ -48,6 +48,18 @@ compose() {
   docker compose --project-directory "${PROJECT_ROOT}" -f "${COMPOSE_FILE}" "$@"
 }
 
+compose_exec_interactive() {
+  if [[ -t 0 ]]; then
+    if command -v winpty >/dev/null 2>&1 && { [[ "${OSTYPE:-}" == msys* ]] || [[ "${OSTYPE:-}" == cygwin* ]] || [[ -n "${MSYSTEM:-}" ]]; }; then
+      winpty docker compose --project-directory "${PROJECT_ROOT}" -f "${COMPOSE_FILE}" exec "${SERVICE_NAME}" "$@"
+      return
+    fi
+    compose exec "${SERVICE_NAME}" "$@"
+    return
+  fi
+  compose exec -T "${SERVICE_NAME}" "$@"
+}
+
 prepare_mounts() {
   docker run --rm \
     -e HOST_UID="${USER_ID}" \
@@ -149,7 +161,7 @@ PY
 enter_container() {
   prepare_mounts
   wait_for_healthy
-  compose exec "${SERVICE_NAME}" bash -lc 'cd /app && exec bash -l'
+  compose_exec_interactive bash -lc 'cd /app && exec bash -l'
 }
 
 show_user() {

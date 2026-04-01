@@ -111,3 +111,4 @@ Then verify again with section 4.
 ## 9. Notes
 - If you intentionally want a custom container username, set `DOCKER_USERS`, `USER_ID`, and `GROUP_ID` consistently and rebuild image.
 - On Windows without WSL/Git Bash, prefer direct `docker compose` commands in PowerShell.
+- `./docker/docker.sh into` now auto-detects Git Bash/mintty on Windows and uses `winpty` for interactive shell compatibility.
