@@ -1,0 +1,44 @@
+services:
+  agent-dev:
+    image: ${IMAGE_NAME:-cdky-agent-dev:dev}
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+      args:
+        DOCKER_USERS: ${DOCKER_USERS:-cdky}
+        USER_ID: ${USER_ID:-1000}
+        GROUP_ID: ${GROUP_ID:-1000}
+    container_name: ${CONTAINER_NAME:-cdky-agent-dev}
+    hostname: in-dev-docker
+    env_file:
+      - docker/.env
+    environment:
+      USER: ${DOCKER_USERS:-cdky}
+      HOME: /home/${DOCKER_USERS:-cdky}
+      DOCKER_USER: ${DOCKER_USERS:-cdky}
+      DOCKER_USER_ID: ${USER_ID:-1000}
+      DOCKER_GRP: ${DOCKER_USERS:-cdky}
+      DOCKER_GRP_ID: ${GROUP_ID:-1000}
+      HISTFILE: /app/.dev_bash_history
+    user: ${DOCKER_USERS:-cdky}
+    ports:
+      - "8501:8501"
+    volumes:
+      - ./:/app
+      - /etc/localtime:/etc/localtime:ro
+    working_dir: /app
+    restart: unless-stopped
+    stdin_open: true
+    tty: true
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import sys, urllib.request; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8501/_stcore/health', timeout=5).status == 200 else 1)",
+        ]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 20s
