@@ -1,0 +1,25 @@
+build/
+cmake-build-debug/
+cmake-build-release/
+.idea
+.vscode
+__pycache__/
+*.py[cod]
+*$py.class
+notebook
+.dev_bash_history
+# third_party
+*.mp4
+
+#tools
+# docker/docker-compose-dev.yaml
+#data/*
+
+
+#file
+*.engine
+*.pt
+*.onnx
+packages/
+*.mp4
+*.log
