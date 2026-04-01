@@ -3,9 +3,11 @@ from utils.logger_handler import logger
 from langchain_core.tools import tool
 from rag.rag_service import RagSummarizeService
 import random
+from datetime import datetime
 from utils.config_handler import agent_conf
 from utils.path_tool import get_abs_path
 import json
+import csv
 from urllib.parse import urlencode
 from urllib.request import urlopen
 from urllib.error import URLError, HTTPError
@@ -13,8 +15,6 @@ import re
 
 rag = RagSummarizeService()
 user_ids = ["1001", "1002", "1003", "1004", "1005", "1006", "1007", "1008", "1009", "1010",]
-month_arr = ["2025-01", "2025-02", "2025-03", "2025-04", "2025-05", "2025-06",
-             "2025-07", "2025-08", "2025-09", "2025-10", "2025-11", "2025-12", ]
 external_data = {}
 
 _IPV4_RE = re.compile(
@@ -172,7 +172,7 @@ def get_user_id() -> str:
 
 @tool(description="获取当前月份，以纯字符串形式返回")
 def get_current_month() -> str:
-    return random.choice(month_arr)
+    return datetime.now().strftime("%Y-%m")
 
 
 def generate_external_data():
@@ -195,15 +195,17 @@ def generate_external_data():
             raise FileNotFoundError(f"外部数据文件{external_data_path}不存在")
 
         with open(external_data_path, "r", encoding="utf-8") as f:
-            for line in f.readlines()[1:]:
-                arr: list[str] = line.strip().split(",")
+            reader = csv.DictReader(f)
+            for row in reader:
+                user_id: str = str(row.get("用户ID", "")).strip().replace('"', "")
+                feature: str = str(row.get("特征", "")).strip().replace('"', "")
+                efficiency: str = str(row.get("清洁效率", "")).strip().replace('"', "")
+                consumables: str = str(row.get("耗材", "")).strip().replace('"', "")
+                comparison: str = str(row.get("对比", "")).strip().replace('"', "")
+                time: str = str(row.get("时间", "")).strip().replace('"', "")
 
-                user_id: str = arr[0].replace('"', "")
-                feature: str = arr[1].replace('"', "")
-                efficiency: str = arr[2].replace('"', "")
-                consumables: str = arr[3].replace('"', "")
-                comparison: str = arr[4].replace('"', "")
-                time: str = arr[5].replace('"', "")
+                if not user_id or not time:
+                    continue
 
                 if user_id not in external_data:
                     external_data[user_id] = {}
@@ -221,7 +223,7 @@ def fetch_external_data(user_id: str, month: str) -> str:
     generate_external_data()
 
     try:
-        return external_data[user_id][month]
+        return json.dumps(external_data[user_id][month], ensure_ascii=False)
     except KeyError:
         logger.warning(f"[fetch_external_data]未能检索到用户：{user_id}在{month}的使用记录数据")
         return ""

@@ -1,4 +1,4 @@
-build/
+﻿build/
 cmake-build-debug/
 cmake-build-release/
 .idea
@@ -8,15 +8,15 @@ __pycache__/
 *$py.class
 notebook
 .dev_bash_history
+
 # third_party
 *.mp4
 
-#tools
+# tools
 # docker/docker-compose-dev.yaml
-#data/*
+# data/*
 
-
-#file
+# file
 *.engine
 *.pt
 *.onnx
@@ -24,3 +24,8 @@ packages/
 *.mp4
 *.log
 docker/.env
+
+# runtime generated
+.pytest_cache/
+logs/
+chroma_db/

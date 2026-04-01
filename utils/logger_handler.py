@@ -2,6 +2,7 @@ import logging
 from utils.path_tool import get_abs_path
 import os
 from datetime import datetime
+import tempfile
 
 # 日志保存的根目录
 LOG_ROOT = get_abs_path("logs")
@@ -39,7 +40,13 @@ def get_logger(
     if not log_file:        # 日志文件的存放路径
         log_file = os.path.join(LOG_ROOT, f"{name}_{datetime.now().strftime('%Y%m%d')}.log")
 
-    file_handler = logging.FileHandler(log_file, encoding='utf-8')
+    try:
+        file_handler = logging.FileHandler(log_file, encoding='utf-8')
+    except Exception:
+        # 某些宿主机挂载场景下特定文件名可能无法直接创建，降级到临时目录保证服务可启动
+        fallback_log = os.path.join(tempfile.gettempdir(), f"{name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log")
+        file_handler = logging.FileHandler(fallback_log, encoding='utf-8')
+
     file_handler.setLevel(file_level)
     file_handler.setFormatter(DEFAULT_LOG_FORMAT)
 

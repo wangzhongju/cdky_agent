@@ -1,0 +1,15 @@
+﻿servers:
+  - id: gaode
+    namespace: gaode
+    enabled: true
+    timeout_seconds: 5
+    max_retries: 2
+    failure_threshold: 5
+    reset_seconds: 30
+  - id: enterprise_data
+    namespace: enterprise
+    enabled: true
+    timeout_seconds: 5
+    max_retries: 2
+    failure_threshold: 5
+    reset_seconds: 30

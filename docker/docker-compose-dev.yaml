@@ -1,8 +1,8 @@
-services:
+﻿services:
   agent-dev:
     image: ${IMAGE_NAME:-cdky-agent-dev:dev}
     build:
-      context: .
+      context: ..
       dockerfile: docker/Dockerfile
       args:
         DOCKER_USERS: ${DOCKER_USERS:-cdky}
@@ -11,8 +11,9 @@ services:
     container_name: ${CONTAINER_NAME:-cdky-agent-dev}
     hostname: in-dev-docker
     env_file:
-      - docker/.env
+      - .env
     environment:
+      AGENT_API_BASE_URL: http://agent-api:8000
       USER: ${DOCKER_USERS:-cdky}
       HOME: /home/${DOCKER_USERS:-cdky}
       DOCKER_USER: ${DOCKER_USERS:-cdky}
@@ -24,9 +25,14 @@ services:
     ports:
       - "8501:8501"
     volumes:
-      - ./:/app
+      - ../:/app
       - /etc/localtime:/etc/localtime:ro
     working_dir: /app
+    command: ["python", "-m", "streamlit", "run", "app.py", "--server.address=0.0.0.0", "--server.port=8501"]
+    depends_on:
+      - agent-api
+      - postgres
+      - redis
     restart: unless-stopped
     stdin_open: true
     tty: true
@@ -42,3 +48,75 @@ services:
       timeout: 10s
       retries: 10
       start_period: 20s
+
+  agent-api:
+    image: ${IMAGE_NAME:-cdky-agent-dev:dev}
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+      args:
+        DOCKER_USERS: ${DOCKER_USERS:-cdky}
+        USER_ID: ${USER_ID:-1000}
+        GROUP_ID: ${GROUP_ID:-1000}
+    container_name: ${CONTAINER_NAME:-cdky-agent-api}
+    hostname: in-dev-docker-api
+    env_file:
+      - .env
+    environment:
+      AGENT_API_BASE_URL: http://agent-api:8000
+      USER: ${DOCKER_USERS:-cdky}
+      HOME: /home/${DOCKER_USERS:-cdky}
+      DOCKER_USER: ${DOCKER_USERS:-cdky}
+      DOCKER_USER_ID: ${USER_ID:-1000}
+      DOCKER_GRP: ${DOCKER_USERS:-cdky}
+      DOCKER_GRP_ID: ${GROUP_ID:-1000}
+      HISTFILE: /app/.dev_bash_history
+    user: ${DOCKER_USERS:-cdky}
+    ports:
+      - "8000:8000"
+    volumes:
+      - ../:/app
+      - /etc/localtime:/etc/localtime:ro
+    working_dir: /app
+    command: ["python", "api_server.py"]
+    depends_on:
+      - postgres
+      - redis
+    restart: unless-stopped
+    stdin_open: true
+    tty: true
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import sys, urllib.request; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/healthz?deep=true', timeout=5).status == 200 else 1)",
+        ]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 20s
+
+  postgres:
+    image: postgres:16
+    container_name: cdky-agent-postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-agent}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-agent}
+      POSTGRES_DB: ${POSTGRES_DB:-agent}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  redis:
+    image: redis:7
+    container_name: cdky-agent-redis
+    ports:
+      - "6379:6379"
+    restart: unless-stopped
+
+volumes:
+  pgdata:

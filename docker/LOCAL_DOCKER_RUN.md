@@ -1,75 +1,58 @@
-﻿# Local Docker Run Guide
+﻿# Local Docker Run Guide (Enterprise Edition)
 
 ## 1. Preconditions
+
 - Docker Desktop is installed and running.
-- `docker` and `docker compose` commands are available.
+- `docker` and `docker compose` are available.
 - Project root: `D:\work\cdky_agent`.
 
-Check:
-
-```powershell
-docker --version
-docker compose version
-```
-
-## 2. Environment Variables
-Create `docker/.env` from template and fill real keys:
+## 2. Prepare Environment
 
 ```powershell
 Copy-Item docker/.env.example docker/.env
 ```
 
-`docker/.env` should include:
+Required keys in `docker/.env`:
 
 ```env
-DASHSCOPE_API_KEY=<your_real_key>
-GAODE_MCP_KEY=<your_real_key>
+DASHSCOPE_API_KEY=your_dashscope_api_key
+GAODE_MCP_KEY=your_gaode_key
+DATABASE_URL=postgresql+psycopg://agent:agent@postgres:5432/agent
+REDIS_URL=redis://redis:6379/0
 ```
 
-## 3. Start Service (Recommended)
+Optional OTLP:
 
-### Option A: Use project script (Git Bash / Linux shell)
-```bash
-./docker/docker.sh up
+```env
+OTLP_ENDPOINT=http://otel-collector:4317
 ```
 
-### Option B: Use docker compose directly (PowerShell)
+## 3. Start Services
+
 ```powershell
 docker compose --project-directory . -f docker/docker-compose-dev.yaml up -d --build
 ```
 
-## 4. Verify Service
+This brings up:
+
+- `agent-api` (FastAPI, port 8000)
+- `agent-dev` (Streamlit UI, port 8501)
+- `postgres`
+- `redis`
+
+## 4. Verify
 
 ```powershell
 docker compose --project-directory . -f docker/docker-compose-dev.yaml ps
+Invoke-WebRequest -UseBasicParsing "http://localhost:8000/healthz?deep=true"
+Invoke-WebRequest -UseBasicParsing "http://localhost:8000/metrics"
 ```
 
-Expected status: `Up ... (healthy)`
+UI:
 
-Health endpoint:
-
-```powershell
-Invoke-WebRequest -UseBasicParsing http://localhost:8501/_stcore/health
-```
-
-Expected response body: `ok`
-
-Open UI:
 - http://localhost:8501
 
-## 5. Daily Commands
-
-Script mode:
-
-```bash
-./docker/docker.sh logs
-./docker/docker.sh whoami
-./docker/docker.sh smoke
-./docker/docker.sh restart
-./docker/docker.sh down
-```
-
-Compose mode:
+## 5. Common Ops
 
 ```powershell
 docker compose --project-directory . -f docker/docker-compose-dev.yaml logs --tail=200
@@ -77,38 +60,20 @@ docker compose --project-directory . -f docker/docker-compose-dev.yaml restart
 docker compose --project-directory . -f docker/docker-compose-dev.yaml down
 ```
 
-## 6. Root Cause of `unable to find user wangzhongju`
-Error:
-
-```text
-Error response from daemon: unable to find user wangzhongju: no matching entries in passwd file
-```
-
-Why it happened:
-- Old `docker/docker.sh` used `DOCKER_USERS=${DOCKER_USERS:-$(id -un)}`.
-- On your machine this resolved to `wangzhongju`.
-- But image was built with default Dockerfile user `cdky`.
-- `restart` originally did not force rebuild, so runtime user and image user could diverge.
-
-## 7. Fix Applied in This Repo
-`docker/docker.sh` has been updated:
-- Runtime user now auto-detects from existing image `Config.User` first, then falls back to `cdky`.
-- `compose exec` no longer forces `-u <host_username>`.
-- `up` and `restart` keep fast mode (`compose up -d`) without rebuild.
-
-So runtime user and image user stay aligned by default, and restart remains fast.
-
-## 8. Recommended Recovery Steps (Run Once)
-If you already hit the user mismatch error before this fix, run:
+## 6. Run Full Tests (Inside Container)
 
 ```powershell
-docker compose --project-directory . -f docker/docker-compose-dev.yaml down
-docker compose --project-directory . -f docker/docker-compose-dev.yaml up -d --build
+docker exec -w /app -e PYTHONPATH=/app cdky-agent-api pytest -q tests/test_api_contracts.py tests/test_functional_api.py
 ```
 
-Then verify again with section 4.
+## 7. Shell Script Shortcut
 
-## 9. Notes
-- If you intentionally want a custom container username, set `DOCKER_USERS`, `USER_ID`, and `GROUP_ID` consistently and rebuild image.
-- On Windows without WSL/Git Bash, prefer direct `docker compose` commands in PowerShell.
-- `./docker/docker.sh into` now auto-detects Git Bash/mintty on Windows and uses `winpty` for interactive shell compatibility.
+If using bash shell, you can still use:
+
+```bash
+./docker/docker.sh up
+./docker/docker.sh logs
+./docker/docker.sh down
+```
+
+Script uses the same compose file and services.

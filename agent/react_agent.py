@@ -1,33 +1,25 @@
-from langchain.agents import create_agent
-from model.factory import chat_model
-from utils.prompt_loader import load_system_prompts
-from agent.tools.agent_tools import (rag_summarize, get_weather, get_user_location, get_user_id,
-                                     get_current_month, fetch_external_data, fill_context_for_report)
-from agent.tools.middleware import monitor_tool, log_before_model, report_prompt_switch
+import uuid
+import os
+import requests
 
 
 class ReactAgent:
     def __init__(self):
-        self.agent = create_agent(
-            model=chat_model,
-            system_prompt=load_system_prompts(),
-            tools=[rag_summarize, get_weather, get_user_location, get_user_id,
-                   get_current_month, fetch_external_data, fill_context_for_report],
-            middleware=[monitor_tool, log_before_model, report_prompt_switch],
-        )
+        self.api_base_url = os.getenv("AGENT_API_BASE_URL", "http://127.0.0.1:8000")
 
     def execute_stream(self, query: str):
-        input_dict = {
-            "messages": [
-                {"role": "user", "content": query},
-            ]
-        }
-
-        # 第三个参数context就是上下文runtime中的信息，就是我们做提示词切换的标记
-        for chunk in self.agent.stream(input_dict, stream_mode="values", context={"report": False}):
-            latest_message = chunk["messages"][-1]
-            if latest_message.content:
-                yield latest_message.content.strip() + "\n"
+        session_id = str(uuid.uuid4())
+        trace_id = str(uuid.uuid4())
+        resp = requests.post(
+            f"{self.api_base_url}/v1/chat/stream",
+            json={"message": query, "session_id": session_id, "trace_id": trace_id},
+            stream=True,
+            timeout=120,
+        )
+        resp.raise_for_status()
+        for chunk in resp.iter_content(chunk_size=1, decode_unicode=True):
+            if chunk:
+                yield chunk
 
 
 if __name__ == '__main__':

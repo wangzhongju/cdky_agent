@@ -1,0 +1,40 @@
+﻿api:
+  host: 0.0.0.0
+  port: 8000
+
+infra:
+  database_url: ${DATABASE_URL}
+  redis_url: ${REDIS_URL}
+  redis_queue_key: a2a:task_queue
+  redis_dead_letter_key: a2a:dead_letter
+
+a2a:
+  worker_poll_seconds: 1
+  max_retry: 3
+
+orchestrator:
+  max_parallel_capabilities: 4
+  model_route_policy: balanced
+
+governance:
+  rate_limit_per_minute: 120
+  daily_quota: 2000
+  metrics_ttl_seconds: 86400
+  default_actor: anonymous
+
+observability:
+  enable_console_tracing: true
+  enable_otlp: false
+  otlp_endpoint: ${OTLP_ENDPOINT}
+  otlp_insecure: true
+
+cost:
+  input_token_ratio: 4
+  output_token_ratio: 4
+  model_prices:
+    qwen3-max:
+      input_per_1k: 0.04
+      output_per_1k: 0.12
+    qwen-plus:
+      input_per_1k: 0.008
+      output_per_1k: 0.02
