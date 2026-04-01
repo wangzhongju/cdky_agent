@@ -9,9 +9,31 @@ SERVICE_NAME="${SERVICE_NAME:-agent-dev}"
 IMAGE_NAME="${IMAGE_NAME:-cdky-agent-dev:dev}"
 USER_ID="${USER_ID:-$(id -u)}"
 GROUP_ID="${GROUP_ID:-$(id -g)}"
-DOCKER_USERS="${DOCKER_USERS:-$(id -un)}"
+DOCKER_USERS="${DOCKER_USERS:-}"
 CONTAINER_NAME="${CONTAINER_NAME:-cdky-agent-dev}"
 BASE_IMAGE="${BASE_IMAGE:-ubuntu:22.04}"
+
+detect_docker_user() {
+  # Prefer explicit DOCKER_USERS from environment.
+  if [[ -n "${DOCKER_USERS}" ]]; then
+    return
+  fi
+
+  # Reuse image runtime user when image already exists to avoid restart mismatch.
+  if docker image inspect "${IMAGE_NAME}" >/dev/null 2>&1; then
+    local image_user
+    image_user="$(docker image inspect "${IMAGE_NAME}" --format '{{.Config.User}}' 2>/dev/null || true)"
+    if [[ -n "${image_user}" ]]; then
+      DOCKER_USERS="${image_user}"
+      return
+    fi
+  fi
+
+  # Fallback for first build.
+  DOCKER_USERS="cdky"
+}
+
+detect_docker_user
 
 export IMAGE_NAME
 export SERVICE_NAME
@@ -78,7 +100,7 @@ smoke() {
   prepare_mounts
   wait_for_healthy
 
-  compose exec -T -u "${DOCKER_USERS}" "${SERVICE_NAME}" python - <<'PY'
+  compose exec -T "${SERVICE_NAME}" python - <<'PY'
 import json
 import urllib.request
 
@@ -127,13 +149,13 @@ PY
 enter_container() {
   prepare_mounts
   wait_for_healthy
-  compose exec -u "${DOCKER_USERS}" "${SERVICE_NAME}" bash -lc 'cd /app && exec bash -l'
+  compose exec "${SERVICE_NAME}" bash -lc 'cd /app && exec bash -l'
 }
 
 show_user() {
   prepare_mounts
   wait_for_healthy
-  compose exec -T -u "${DOCKER_USERS}" "${SERVICE_NAME}" bash -lc 'whoami && id && printf "HOME=%s\\n" "$HOME"'
+  compose exec -T "${SERVICE_NAME}" bash -lc 'whoami && id && printf "HOME=%s\\n" "$HOME"'
 }
 
 case "${1:-}" in
