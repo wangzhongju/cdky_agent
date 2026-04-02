@@ -1,5 +1,7 @@
 ﻿from __future__ import annotations
 
+"""负责聊天与报告请求的 LangGraph 编排引擎。"""
+
 import json
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any
@@ -15,6 +17,8 @@ from utils.logger_handler import logger
 
 
 class OrchestratorEngine:
+    """持有编译后的图对象，以及各节点的具体实现。"""
+
     def __init__(self, gateway: CapabilityGateway):
         self.gateway = gateway
         self.max_parallel = int(enterprise_conf.get("orchestrator", {}).get("max_parallel_capabilities", 4))
@@ -23,6 +27,7 @@ class OrchestratorEngine:
         self.graph = self._build_graph().compile()
 
     def _build_graph(self):
+        """在启动时构建一次固定的编排流水线。"""
         graph = StateGraph(OrchestratorState)
 
         graph.add_node("IntentClassifier", self.intent_classifier)
@@ -43,6 +48,7 @@ class OrchestratorEngine:
         return graph
 
     def run(self, query: str, session_id: str, trace_id: str) -> dict[str, Any]:
+        """构造初始状态并执行编译后的图。"""
         state: OrchestratorState = {
             "query": query,
             "session_id": session_id,
@@ -54,6 +60,7 @@ class OrchestratorEngine:
         return self.graph.invoke(state)
 
     def intent_classifier(self, state: OrchestratorState) -> OrchestratorState:
+        """将请求划分到图中使用的粗粒度执行分支。"""
         text = state["query"]
         report_keywords = ["报告", "使用记录", "月报", "统计"]
         intent = "report" if any(k in text for k in report_keywords) else "chat"
@@ -61,6 +68,7 @@ class OrchestratorEngine:
         return state
 
     def planner(self, state: OrchestratorState) -> OrchestratorState:
+        """把识别出的意图翻译成可执行的能力计划。"""
         query = state["query"]
         intent = state["intent"]
         plan: list[dict[str, Any]] = []
@@ -83,10 +91,11 @@ class OrchestratorEngine:
         return state
 
     def capability_router(self, state: OrchestratorState) -> OrchestratorState:
-        # 这里保留固定节点，路由策略已在plan中编码
+        """保留稳定的路由扩展点，便于后续加入策略化分流。"""
         return state
 
     def executor(self, state: OrchestratorState) -> OrchestratorState:
+        """根据意图把执行分派到对应流程。"""
         intent = state["intent"]
         plan = state["planned_capabilities"]
 
@@ -96,6 +105,11 @@ class OrchestratorEngine:
         return self._execute_general_flow(state, plan)
 
     def _execute_report_flow(self, state: OrchestratorState, plan: list[dict[str, Any]]) -> OrchestratorState:
+        """按严格顺序执行报告生成流程。
+
+        报告链路强依赖前序步骤产出的上下文，因此这里采用串行执行，
+        而不是并行化。
+        """
         results: list[dict[str, Any]] = []
         trace_id = state["trace_id"]
 
@@ -130,11 +144,13 @@ class OrchestratorEngine:
         return state
 
     def _execute_general_flow(self, state: OrchestratorState, plan: list[dict[str, Any]]) -> OrchestratorState:
+        """在安全前提下，以有限并行度执行通用聊天能力。"""
         results: list[dict[str, Any]] = []
         trace_id = state["trace_id"]
         city = ""
 
         def run_step(step: dict[str, Any]):
+            """解析延迟参数，并调用单个能力。"""
             fqdn = step["fqdn"]
             args = step["args"]
             if args == "__DEFERRED_CITY__":
@@ -164,6 +180,7 @@ class OrchestratorEngine:
         return state
 
     def reviewer(self, state: OrchestratorState) -> OrchestratorState:
+        """把原始能力输出归并成一份回答草稿。"""
         if not state.get("capability_results"):
             state["response"] = "未获取到任何可用能力结果。"
             return state
@@ -184,6 +201,11 @@ class OrchestratorEngine:
         return state
 
     def responder(self, state: OrchestratorState) -> OrchestratorState:
+        """对聊天类响应再做一次最终 LLM 汇总。
+
+        报告类请求会跳过这一步，因为 ``report.report_writer`` 已经直接产出
+        最终报告正文。
+        """
         if state["intent"] == "report":
             return state
 

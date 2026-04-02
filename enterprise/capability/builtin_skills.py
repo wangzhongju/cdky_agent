@@ -1,5 +1,11 @@
 ﻿from __future__ import annotations
 
+"""内置能力注册函数集合。
+
+这些函数把遗留的工具对象封装成 ``Capability``，供 ``CapabilityGateway``
+统一消费。
+"""
+
 import csv
 import json
 from datetime import datetime
@@ -19,10 +25,12 @@ from utils.prompt_loader import load_report_prompts
 
 
 def _invoke_tool(tool_obj, payload: dict):
+    """按 LangChain 工具期望的 payload 结构发起调用。"""
     return tool_obj.invoke(payload)
 
 
 def register_rag_capability() -> list[Capability]:
+    """注册知识检索与总结能力。"""
     return [
         Capability(
             name="rag_summarize",
@@ -36,6 +44,7 @@ def register_rag_capability() -> list[Capability]:
 
 
 def register_weather_capabilities() -> list[Capability]:
+    """注册聊天流程中会用到的天气与定位能力。"""
     return [
         Capability(
             name="get_weather",
@@ -57,6 +66,7 @@ def register_weather_capabilities() -> list[Capability]:
 
 
 def register_report_capabilities() -> list[Capability]:
+    """注册报告生成流程固定使用的一组能力。"""
     return [
         Capability(
             name="get_user_id",
@@ -102,6 +112,11 @@ def register_report_capabilities() -> list[Capability]:
 
 
 def report_writer(query: str, external_data: dict | str) -> str:
+    """根据已经拿到的外部数据生成最终报告文本。
+
+    这里会显式告诉模型：当前阶段已经没有工具调用权限，从而保证报告生成
+    保持确定性，不再递归触发工具调用。
+    """
     prompt = load_report_prompts()
     payload = external_data
     if isinstance(external_data, str):
@@ -137,8 +152,10 @@ def report_writer(query: str, external_data: dict | str) -> str:
 
 
 def latest_available_month() -> str:
-    """
-    返回 external records 中可用的最新月份，避免当前真实月份无数据时报告链路中断。
+    """返回 CSV 数据中实际存在的最新月份。
+
+    报告流程这里使用“数据可用月份”而不是“真实当前月份”，避免当前月份
+    还没有导入数据时整条报告链路失败。
     """
     csv_path = get_abs_path("data/external/records.csv")
     months: set[str] = set()

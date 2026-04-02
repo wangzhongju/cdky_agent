@@ -1,4 +1,4 @@
-from langchain_chroma import Chroma
+﻿from langchain_chroma import Chroma
 from langchain_core.documents import Document
 from utils.config_handler import chroma_conf
 from model.factory import embed_model
@@ -10,6 +10,8 @@ import os
 
 
 class VectorStoreService:
+    """管理 RAG 能力使用的 Chroma 向量库。"""
+
     def __init__(self):
         self.vector_store = Chroma(
             collection_name=chroma_conf["collection_name"],
@@ -25,6 +27,7 @@ class VectorStoreService:
         )
 
     def get_retriever(self):
+        """基于底层 Chroma 集合返回一个检索器视图。"""
         return self.vector_store.as_retriever(search_kwargs={"k": chroma_conf["k"]})
 
     def load_document(self):
@@ -111,5 +114,3 @@ if __name__ == '__main__':
     for r in res:
         print(r.page_content)
         print("-"*20)
-
-

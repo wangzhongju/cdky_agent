@@ -5,12 +5,15 @@ from utils.config_handler import rag_conf, enterprise_conf
 
 
 class ModelRouter:
+    """用于选择最终响应模型的轻量策略对象。"""
+
     def __init__(self):
         self.main_model_name = rag_conf.get("chat_model_name", "qwen3-max")
         self.light_model_name = rag_conf.get("lightweight_chat_model_name", self.main_model_name)
         self.policy = enterprise_conf.get("orchestrator", {}).get("model_route_policy", "balanced")
 
     def pick(self, query: str, intent: str) -> tuple[str, ChatTongyi]:
+        """返回选中的模型名称，以及实例化后的聊天模型。"""
         model_name = self.main_model_name
 
         if self.policy == "cost_preferred":

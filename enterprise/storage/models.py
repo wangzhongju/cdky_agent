@@ -4,10 +4,14 @@ from sqlalchemy import String, Text, Boolean, Integer, DateTime
 
 
 class Base(DeclarativeBase):
+    """所有 ORM 模型的基类。"""
+
     pass
 
 
 class SkillRecord(Base):
+    """技能 manifest 及其启用状态的持久化视图。"""
+
     __tablename__ = "skill_registry"
 
     id: Mapped[str] = mapped_column(String(100), primary_key=True)
@@ -22,6 +26,8 @@ class SkillRecord(Base):
 
 
 class TaskRecord(Base):
+    """异步 A2A 任务状态机对应的持久化记录。"""
+
     __tablename__ = "a2a_tasks"
 
     task_id: Mapped[str] = mapped_column(String(100), primary_key=True)
@@ -41,6 +47,8 @@ class TaskRecord(Base):
 
 
 class AuditEventRecord(Base):
+    """只追加不修改的审计日志记录。"""
+
     __tablename__ = "audit_events"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -56,6 +64,8 @@ class AuditEventRecord(Base):
 
 
 class CostRecord(Base):
+    """按请求记录的模型成本估算数据。"""
+
     __tablename__ = "cost_records"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)

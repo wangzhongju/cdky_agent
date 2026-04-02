@@ -7,10 +7,13 @@ from enterprise.storage.redis_client import get_redis_client
 
 
 class HealthService:
+    """校验 Redis 与 Postgres 的可达性。"""
+
     def __init__(self):
         self.redis = get_redis_client()
 
     def check(self) -> dict:
+        """返回结构化的依赖健康报告。"""
         status = {"api": "ok", "redis": "unknown", "postgres": "unknown"}
 
         try:

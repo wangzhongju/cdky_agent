@@ -1,4 +1,4 @@
-"""
+﻿"""
 yaml
 k: v
 """
@@ -9,6 +9,7 @@ from typing import Any
 
 
 def _load_single_dotenv(env_path: str, encoding: str = "utf-8"):
+    """把 dotenv 文件中的 ``KEY=VALUE`` 加载到 ``os.environ``。"""
     if not os.path.exists(env_path):
         return
 
@@ -30,6 +31,7 @@ def _load_single_dotenv(env_path: str, encoding: str = "utf-8"):
 
 
 def load_dotenv(encoding: str = "utf-8"):
+    """如果存在项目本地 dotenv 文件，则加载其中的环境变量。"""
     env_candidates = (
         get_abs_path(".env"),
         get_abs_path("docker/.env"),
@@ -40,36 +42,43 @@ def load_dotenv(encoding: str = "utf-8"):
 
 
 def load_rag_config(config_path: str=get_abs_path("config/rag.yml"), encoding: str="utf-8"):
+    """加载与 RAG 相关的 YAML 配置。"""
     with open(config_path, "r", encoding=encoding) as f:
         return _resolve_env_placeholders(yaml.load(f, Loader=yaml.FullLoader))
 
 
 def load_chroma_config(config_path: str=get_abs_path("config/chroma.yml"), encoding: str="utf-8"):
+    """加载 Chroma / 向量库 YAML 配置。"""
     with open(config_path, "r", encoding=encoding) as f:
         return _resolve_env_placeholders(yaml.load(f, Loader=yaml.FullLoader))
 
 
 def load_prompts_config(config_path: str=get_abs_path("config/prompts.yml"), encoding: str="utf-8"):
+    """加载提示词路径相关的 YAML 配置。"""
     with open(config_path, "r", encoding=encoding) as f:
         return _resolve_env_placeholders(yaml.load(f, Loader=yaml.FullLoader))
 
 
 def load_agent_config(config_path: str=get_abs_path("config/agent.yml"), encoding: str="utf-8"):
+    """加载遗留工具运行时相关的 YAML 配置。"""
     with open(config_path, "r", encoding=encoding) as f:
         return _resolve_env_placeholders(yaml.load(f, Loader=yaml.FullLoader))
 
 
 def load_enterprise_config(config_path: str = get_abs_path("config/enterprise.yml"), encoding: str = "utf-8"):
+    """加载企业版运行时 YAML 配置。"""
     with open(config_path, "r", encoding=encoding) as f:
         return _resolve_env_placeholders(yaml.load(f, Loader=yaml.FullLoader))
 
 
 def load_mcp_config(config_path: str = get_abs_path("config/mcp.yml"), encoding: str = "utf-8"):
+    """加载 MCP 服务端 YAML 配置。"""
     with open(config_path, "r", encoding=encoding) as f:
         return _resolve_env_placeholders(yaml.load(f, Loader=yaml.FullLoader))
 
 
 def _resolve_env_placeholders(value: Any) -> Any:
+    """递归替换 ``${ENV_NAME}`` 形式的环境变量占位符。"""
     if isinstance(value, dict):
         return {k: _resolve_env_placeholders(v) for k, v in value.items()}
 
@@ -84,6 +93,7 @@ def _resolve_env_placeholders(value: Any) -> Any:
 
 
 def apply_env_overrides(config: dict):
+    """在 YAML 解析后应用少量环境变量覆盖。"""
     gaode_key = os.getenv("GAODE_MCP_KEY", "").strip()
     if gaode_key:
         config["gaodekey"] = gaode_key

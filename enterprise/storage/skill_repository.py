@@ -9,7 +9,10 @@ from enterprise.storage.models import SkillRecord
 
 
 class SkillRepository:
+    """封装 ``SkillRecord`` 对应的 SQLAlchemy 读写操作。"""
+
     def upsert(self, manifest: dict) -> None:
+        """插入或更新一条技能 manifest 记录。"""
         with SessionLocal() as session:
             stmt = select(SkillRecord).where(SkillRecord.id == manifest["id"])
             row = session.scalars(stmt).first()
@@ -56,6 +59,7 @@ class SkillRepository:
             ]
 
     def set_enabled(self, skill_id: str, enabled: bool) -> bool:
+        """切换单个技能的启用状态。"""
         with SessionLocal() as session:
             stmt = select(SkillRecord).where(SkillRecord.id == skill_id)
             row = session.scalars(stmt).first()

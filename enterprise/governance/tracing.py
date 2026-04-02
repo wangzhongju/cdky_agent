@@ -2,9 +2,9 @@
 
 import time
 import uuid
-from contextvars import ContextVar
+from contextvars import ContextVar  #! 上下文变量管理
 
-from opentelemetry import trace
+from opentelemetry import trace     #! 可观测性框架，生成、收集和导出遥测数据
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor, ConsoleSpanExporter
 from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
@@ -16,6 +16,7 @@ ACTOR_CTX: ContextVar[str] = ContextVar("actor", default="anonymous")
 
 
 def setup_tracer() -> None:
+    """根据 ``enterprise.yml`` 配置初始化 Tracing 导出器。"""
     provider = TracerProvider()
     ob_conf = enterprise_conf.get("observability", {})
 
@@ -35,6 +36,7 @@ def setup_tracer() -> None:
 
 
 def current_trace_id() -> str:
+    """返回当前 trace_id；如果没有则延迟生成一个。"""
     trace_id = TRACE_ID_CTX.get()
     if trace_id:
         return trace_id
@@ -42,10 +44,12 @@ def current_trace_id() -> str:
 
 
 def current_actor() -> str:
+    """返回当前请求上下文中的调用方标识。"""
     return ACTOR_CTX.get() or "anonymous"
 
 
 async def trace_context_middleware(request: Request, call_next):
+    """把 ``trace_id`` 和 ``actor`` 绑定到上下文变量，供下游使用。"""
     trace_id = request.headers.get("x-trace-id") or str(uuid.uuid4())
     actor = request.headers.get("x-api-key") or "anonymous"
 

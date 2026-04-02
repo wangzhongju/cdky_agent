@@ -18,7 +18,10 @@
 - 治理能力：限流配额、审计、成本估算、Tracing、Prometheus 指标
 
 详细说明请查看：
-- [企业级 Agent 详细介绍与使用流程](/D:/work/cdky_agent/docs/AGENT_ENTERPRISE_GUIDE.md)
+- [企业级 Agent 详细介绍与使用流程](docs/AGENT_ENTERPRISE_GUIDE.md)
+- [代码阅读指南与类图](docs/CODE_READING_GUIDE.md)
+- [逐文件精读版](docs/FILE_BY_FILE_DEEP_DIVE.md)
+- [字段级数据血缘图](docs/FIELD_DATA_LINEAGE.md)
 
 ## 当前系统架构
 

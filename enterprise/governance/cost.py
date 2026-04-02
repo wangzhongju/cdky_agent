@@ -11,6 +11,8 @@ from utils.config_handler import enterprise_conf
 
 
 class CostService:
+    """计算近似 token 数量，并估算模型调用成本。"""
+
     def __init__(self):
         self.redis = get_redis_client()
         self.cost_conf = enterprise_conf.get("cost", {})
@@ -19,17 +21,20 @@ class CostService:
         self.prices = self.cost_conf.get("model_prices", {})
 
     def estimate_tokens(self, input_text: str, output_text: str) -> tuple[int, int]:
+        """根据字符长度比例近似估算输入输出 token 数。"""
         in_tokens = max(1, len(input_text) // max(1, self.ratio_in))
         out_tokens = max(1, len(output_text) // max(1, self.ratio_out))
         return in_tokens, out_tokens
 
     def estimate_cost(self, model_name: str, input_tokens: int, output_tokens: int) -> float:
+        """按配置的单价把 token 数换算成估算费用。"""
         price = self.prices.get(model_name, {"input_per_1k": 0.0, "output_per_1k": 0.0})
         in_cost = (input_tokens / 1000.0) * float(price.get("input_per_1k", 0.0))
         out_cost = (output_tokens / 1000.0) * float(price.get("output_per_1k", 0.0))
         return in_cost + out_cost
 
     def record(self, trace_id: str, actor: str, model_name: str, input_text: str, output_text: str) -> dict:
+        """估算成本、持久化记录，并更新运行时指标。"""
         in_tokens, out_tokens = self.estimate_tokens(input_text, output_text)
         cost = self.estimate_cost(model_name, in_tokens, out_tokens)
 

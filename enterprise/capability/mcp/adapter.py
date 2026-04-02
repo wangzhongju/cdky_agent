@@ -1,5 +1,7 @@
 ﻿from __future__ import annotations
 
+"""为外部 MCP 工具补上超时、重试、熔断等韧性策略的适配层。"""
+
 from concurrent.futures import ThreadPoolExecutor, TimeoutError
 from typing import Any, Callable
 
@@ -9,6 +11,8 @@ from utils.logger_handler import logger
 
 
 class MCPAdapter:
+    """管理 MCP 能力及其对应的熔断器。"""
+
     def __init__(self):
         self._capabilities: dict[str, Capability] = {}
         self._breakers: dict[str, CircuitBreaker] = {}
@@ -24,11 +28,13 @@ class MCPAdapter:
         failure_threshold: int,
         reset_seconds: int,
     ) -> None:
+        """注册一个带超时、重试和熔断保护的 MCP 工具。"""
         key = f"{namespace}.{name}"
         breaker = CircuitBreaker(failure_threshold=failure_threshold, reset_seconds=reset_seconds)
         self._breakers[key] = breaker
 
         def wrapped_handler(**kwargs):
+            """在韧性控制之下执行原始 MCP 处理器。"""
             if not breaker.allow():
                 raise RuntimeError(f"MCP服务 {key} 熔断中")
 
@@ -59,10 +65,13 @@ class MCPAdapter:
         )
 
     def discover_tools(self) -> list[Capability]:
+        """以运行时能力对象的形式返回全部 MCP 工具。"""
         return list(self._capabilities.values())
 
     def discover_resources(self) -> list[dict]:
+        """为未来的 MCP Resource 暴露预留接口。"""
         return []
 
     def discover_prompts(self) -> list[dict]:
+        """为未来的 MCP Prompt 暴露预留接口。"""
         return []

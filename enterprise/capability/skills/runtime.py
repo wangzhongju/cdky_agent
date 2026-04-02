@@ -1,5 +1,7 @@
 ﻿from __future__ import annotations
 
+"""负责发现技能清单并加载其 Python 入口点。"""
+
 import importlib
 import json
 from pathlib import Path
@@ -21,10 +23,13 @@ REQUIRED_FIELDS = {
 
 
 class SkillRuntime:
+    """面向文件系统的技能发现与导入加载运行时。"""
+
     def __init__(self, skill_dir: str = "skills"):
         self.skill_dir = Path(skill_dir)
 
     def discover_manifests(self) -> list[dict[str, Any]]:
+        """从磁盘收集 manifest，并追加内置 manifest。"""
         manifests: list[dict[str, Any]] = []
 
         if self.skill_dir.exists():
@@ -40,18 +45,21 @@ class SkillRuntime:
         return manifests
 
     def load_entrypoint(self, dotted_path: str):
+        """导入 manifest 中声明的入口点。"""
         module_name, attr_name = dotted_path.rsplit(":", 1)
         mod = importlib.import_module(module_name)
         return getattr(mod, attr_name)
 
     @staticmethod
     def _validate_manifest(payload: dict, path: str) -> None:
+        """当 manifest 缺少必需治理字段时尽早失败。"""
         missing = REQUIRED_FIELDS - set(payload.keys())
         if missing:
             raise ValueError(f"manifest缺少字段{sorted(missing)} path={path}")
 
     @staticmethod
     def _builtin_manifests() -> list[dict[str, Any]]:
+        """返回项目内置的能力包 manifest。"""
         return [
             {
                 "id": "builtin.rag",

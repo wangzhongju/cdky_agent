@@ -8,6 +8,8 @@ from enterprise.storage.models import AuditEventRecord
 
 
 class AuditService:
+    """把结构化审计记录写入 Postgres。"""
+
     def log(
         self,
         event_type: str,
@@ -19,6 +21,7 @@ class AuditService:
         error: str = "",
         latency_ms: int = 0,
     ) -> None:
+        """插入一条审计事件记录。"""
         with SessionLocal() as session:
             row = AuditEventRecord(
                 event_type=event_type,

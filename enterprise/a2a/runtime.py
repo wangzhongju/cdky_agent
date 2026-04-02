@@ -1,5 +1,14 @@
 ﻿from __future__ import annotations
 
+"""基于 Redis 与 Postgres 的进程内 A2A 任务运行时。
+
+这个运行时提供了一套轻量级异步执行模型：
+- API 请求先把任务推进 Redis 队列
+- 后台线程持续消费队列
+- 任务状态变化写入 Postgres
+- 失败任务会重试，最终进入死信队列
+"""
+
 import json
 import threading
 import time
@@ -17,6 +26,8 @@ from utils.logger_handler import logger
 
 
 class A2ARuntime:
+    """提交、执行并追踪异步编排任务。"""
+
     def __init__(self, orchestrator: OrchestratorService):
         infra = enterprise_conf.get("infra", {})
         a2a_conf = enterprise_conf.get("a2a", {})
@@ -34,6 +45,7 @@ class A2ARuntime:
         self.metrics = MetricsService()
 
     def start(self) -> None:
+        """如果后台 worker 尚未运行，则启动它。"""
         if self._worker and self._worker.is_alive():
             return
 
@@ -41,9 +53,11 @@ class A2ARuntime:
         self._worker.start()
 
     def stop(self) -> None:
+        """在进程关闭时通知 worker 循环停止。"""
         self._stop.set()
 
     def submit_task(self, goal: str, constraints: dict, context_ref: dict, input_data: dict, trace_id: str | None = None) -> dict:
+        """持久化新任务，并把它推进异步处理队列。"""
         task = A2ATaskPayload(
             task_id=str(uuid.uuid4()),
             goal=goal,
@@ -61,6 +75,7 @@ class A2ARuntime:
         return {"task_id": task.task_id, "status": task.status.value, "trace_id": task.trace_id}
 
     def get_task(self, task_id: str) -> dict | None:
+        """读取任务记录，并反序列化其中的 JSON 字段。"""
         row = self.repo.get_task(task_id)
         if not row:
             return None
@@ -82,6 +97,7 @@ class A2ARuntime:
         }
 
     def _run_worker_loop(self) -> None:
+        """持续从 Redis 拉取任务并处理。"""
         while not self._stop.is_set():
             data = self.redis.blpop(self.queue_key, timeout=self.poll_seconds)
             if not data:
@@ -96,6 +112,7 @@ class A2ARuntime:
                 self.redis.rpush(self.dead_letter_key, payload)
 
     def _process_task(self, task: A2ATaskPayload) -> None:
+        """推进单个任务的生命周期，并处理失败重试。"""
         self.repo.update_status(task.task_id, TaskStatus.RUNNING.value)
         self.metrics.incr("tasks_running")
         a2a_tasks_total.labels(status="running").inc()

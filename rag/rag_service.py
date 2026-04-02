@@ -1,4 +1,4 @@
-
+﻿
 """
 总结服务类：用户提问，搜索参考资料，将提问和参考资料提交给模型，让模型总结回复
 """
@@ -16,6 +16,8 @@ def print_prompt(prompt):
 
 
 class RagSummarizeService(object):
+    """从 Chroma 检索上下文，并交给聊天模型做总结。"""
+
     def __init__(self):
         self.vector_store = VectorStoreService()
         self.retriever = self.vector_store.get_retriever()
@@ -25,13 +27,16 @@ class RagSummarizeService(object):
         self.chain = self._init_chain()
 
     def _init_chain(self):
+        """组装“提示词 -> 模型 -> 字符串解析器”这条链路。"""
         chain = self.prompt_template | print_prompt | self.model | StrOutputParser()
         return chain
 
     def retriever_docs(self, query: str) -> list[Document]:
+        """取回与查询最相关的前 k 个文档。"""
         return self.retriever.invoke(query)
 
     def rag_summarize(self, query: str) -> str:
+        """把检索结果拼成上下文文本，再交给模型做总结。"""
 
         context_docs = self.retriever_docs(query)
 

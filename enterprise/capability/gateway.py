@@ -1,5 +1,14 @@
 ﻿from __future__ import annotations
 
+"""统一的能力目录与调用网关。
+
+编排器不会直接触达原始 Skill 或 MCP 处理器，而是统一经过这里完成：
+- 能力加载
+- 能力查找
+- 调用审计
+- 运行时调用
+"""
+
 import time
 from typing import Any
 
@@ -16,6 +25,8 @@ from utils.logger_handler import logger
 
 
 class CapabilityGateway:
+    """把技能能力与 MCP 工具聚合成统一的运行时命名空间。"""
+
     def __init__(self):
         self._capabilities: dict[str, Capability] = {}
         self.skill_runtime = SkillRuntime()
@@ -25,6 +36,7 @@ class CapabilityGateway:
         self._load_all()
 
     def _load_all(self) -> None:
+        """先加载技能清单与入口点，再挂载 MCP 能力。"""
         manifests = self.skill_runtime.discover_manifests()
         self.skill_registry.sync_manifests(manifests)
 
@@ -42,6 +54,7 @@ class CapabilityGateway:
         self._load_mcp_adapters()
 
     def _load_mcp_adapters(self) -> None:
+        """注册配置中的 MCP 工具，并合并进能力目录。"""
         servers = mcp_conf.get("servers", [])
         server_map = {srv["id"]: srv for srv in servers if srv.get("enabled", True)}
 
@@ -85,10 +98,12 @@ class CapabilityGateway:
             self._capabilities[cap.fqdn] = cap
 
     def reload(self) -> None:
+        """根据配置与注册表状态重建内存中的能力目录。"""
         self._capabilities = {}
         self._load_all()
 
     def list_capabilities(self) -> list[dict[str, Any]]:
+        """返回当前运行时可见能力的序列化快照。"""
         return [
             {
                 "name": cap.name,
@@ -102,12 +117,14 @@ class CapabilityGateway:
         ]
 
     def resolve_capability(self, fqdn: str) -> Capability:
+        """根据全限定名解析一个能力对象。"""
         capability = self._capabilities.get(fqdn)
         if not capability:
             raise KeyError(f"能力未注册: {fqdn}")
         return capability
 
     def invoke_capability(self, fqdn: str, **kwargs) -> Any:
+        """以统一的审计与指标逻辑调用单个能力。"""
         cap = self.resolve_capability(fqdn)
         trace_id = str(kwargs.pop("trace_id", "") or current_trace_id())
         actor = current_actor()
@@ -142,9 +159,11 @@ class CapabilityGateway:
             return f"能力 {fqdn} 调用失败: {exc}"
 
     def list_skills(self) -> list[dict[str, Any]]:
+        """返回持久化后的技能注册表视图。"""
         return self.skill_registry.list_skills()
 
     def set_skill_enabled(self, skill_id: str, enabled: bool) -> bool:
+        """切换技能开关，并在需要时刷新能力目录。"""
         ok = self.skill_registry.set_enabled(skill_id, enabled)
         if ok:
             self.reload()
