@@ -82,7 +82,7 @@ async def governance_middleware(request: Request, call_next):
     audit_service: AuditService = app.state.audit_service
 
     rate_limit_service.check(actor)           #! 限流
-    metrics_service.incr("requests_total")    #! 运行时计数，以便于限流统计
+    metrics_service.incr("requests_total")    #! 运行时计数，以便于限流统计?
     inflight_requests.inc()   #! 指标：活跃数统计
 
     try:

@@ -4,6 +4,41 @@ import time
 import uuid
 from contextvars import ContextVar  #! 上下文变量管理
 
+"""
+OpenTelemetry（OTel） 是一个统一的可观测性标准和工具集，用来收集三类数据：
+    - Traces（链路追踪）
+    - Metrics（指标）
+    - Logs（日志）
+把系统运行信息采集 → 统一格式 → 发到监控/分析系统
+整体架构
+OpenTelemetry SDK    #! sdk 采集数据
+   ↓
+Exporter（OTLP / Console / Jaeger 等） #! Exporter 导出数据
+   ↓
+OTel Collector（可选）  #! Collector 中转/处理
+   ↓
+后端（Jaeger / Prometheus / Grafana / Tempo 等）
+
+! 核心概念
+1. Trace & Span（链路）
+    一个请求 = 一个 Trace
+    一个步骤 = 一个 Span
+    Trace
+    ├── Span A（HTTP请求）
+    ├── Span B（数据库查询）
+    └── Span C（调用下游服务）
+2. Context（上下文）
+    用于在不同服务之间传递 trace 信息: trace_id   span_id
+3. Exporter（导出器）
+    OTLP Exporter（最常用）   OpenTelemetry 的标准协议，支持 gRPC（4317）   HTTP（4318）
+    ConsoleSpanExporter（调试）
+    ...
+
+自动埋点：
+pip install opentelemetry-instrumentation
+opentelemetry-instrument python app.py
+"""
+
 from opentelemetry import trace     #! 可观测性框架，生成、收集和导出遥测数据
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor, ConsoleSpanExporter
@@ -32,7 +67,7 @@ def setup_tracer() -> None:
             )
             provider.add_span_processor(BatchSpanProcessor(exporter))
 
-    trace.set_tracer_provider(provider)
+    trace.set_tracer_provider(provider)   #! 设置 provider，指定 Exporter（导出器）
 
 
 def current_trace_id() -> str:
@@ -58,6 +93,7 @@ async def trace_context_middleware(request: Request, call_next):
 
     tracer = trace.get_tracer("enterprise-agent")
     start = time.time()
+    #! 生成 span
     with tracer.start_as_current_span(f"{request.method} {request.url.path}") as span:
         span.set_attribute("trace_id", trace_id)
         span.set_attribute("actor", actor)
