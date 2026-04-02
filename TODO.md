@@ -58,8 +58,7 @@
    - Redis/Postgres 短暂故障可恢复，任务不丢失（至少一次投递 + 幂等去重）。
    - 敏感配置不落代码仓，审计日志可追溯到 trace_id。
 4. **性能基线（阶段一）**
-
-- 单会话端到端 P95 延迟、能力调用成功率、任务完成率、重试率建立基线并纳入监控看板。
+   - 单会话端到端 P95 延迟、能力调用成功率、任务完成率、重试率建立基线并纳入监控看板。
 
 ### Assumptions
 
@@ -93,13 +92,13 @@
   enterprise/capability/skills/registry.py
   enterprise/capability/mcp/adapter.py
 
-编排层（LangGraph 固定节点）：
-enterprise/orchestrator/engine.py
-enterprise/orchestrator/service.py
+  编排层（LangGraph 固定节点）：
+  enterprise/orchestrator/engine.py
+  enterprise/orchestrator/service.py
 
-协作层（A2A 协议 + Redis 队列 + 状态机）：
-enterprise/a2a/protocol.py
-enterprise/a2a/runtime.py
+  协作层（A2A 协议 + Redis 队列 + 状态机）：
+  enterprise/a2a/protocol.py
+  enterprise/a2a/runtime.py
 
 - 新增 Postgres/Redis 持久化
   enterprise/storage/models.py
