@@ -22,6 +22,7 @@
 - [代码阅读指南与类图](docs/CODE_READING_GUIDE.md)
 - [逐文件精读版](docs/FILE_BY_FILE_DEEP_DIVE.md)
 - [字段级数据血缘图](docs/FIELD_DATA_LINEAGE.md)
+- [库用法练习场](library_playground/README.md)
 
 ## 当前系统架构
 
