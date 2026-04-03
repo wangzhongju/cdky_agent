@@ -2,7 +2,7 @@
 
 import time
 import uuid
-from contextvars import ContextVar  #! 上下文变量管理
+from contextvars import ContextVar  #! 上下文变量管理，解决数据在异步/协程中不安全问题
 
 """
 OpenTelemetry（OTel） 是一个统一的可观测性标准和工具集，用来收集三类数据：

@@ -9,6 +9,10 @@
 - 异步任务接口暴露
 
 真正的业务编排逻辑都下沉到 ``app.state`` 中保存的服务对象里。
+lifespan是根：创建，并托管所有基础服务实例
+app.state是桥：把启动期创建的服务暴露给请求期代码
+governance_middleware是治理入口：每个请求都会走限流/指标/审计
+trace_context_middleware + current_trace_id() 打通链路追踪
 """
 
 import time
@@ -38,6 +42,11 @@ from enterprise.orchestrator.service import OrchestratorService
 from enterprise.storage.init_db import init_storage
 
 
+"""
+lifespan:应用级生命周期总控
+    yield 之前: 应用启动时执行 (初始化资源)
+    yiled 之后: 应用停止时执行 (释放资源)
+"""
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """在进程级别初始化长生命周期服务。
@@ -60,18 +69,42 @@ async def lifespan(app: FastAPI):
     app.state.health_service = HealthService()        #! 校验 Redis 与 Postgres 的可达性
 
     yield
-    a2a_runtime.stop() #?
+    a2a_runtime.stop()
 
 
+"""把生命周期挂载到应用, 告诉FastAPI: 用上面这套生命周期逻辑管理应用"""
 app = FastAPI(title="Enterprise Agent API", version="2.0.0", lifespan=lifespan)
-app.middleware("http")(trace_context_middleware)  #! 基于 contextvars 库将``trace_id`` 和 ``actor`` 绑定到上下文变量，供下游使用，以及 opentelemetry 观测
+#! 基于 contextvars 库将``trace_id`` 和 ``actor`` 绑定到上下文变量，供下游使用，以及 opentelemetry 观测
+#! govermance/tracing.py, 治理, 基于 opentelemetry 的信息采集工具
+"""
+#**中间件关系：追踪中间件+治理中间件
+#**FastAPI中间件的执行顺序：LIFO，即当前程序执行顺序为：对于 stream chat
+时间线：
+t=0ms   客户端发起请求
+t=1ms   governance_middleware 前置执行
+t=2ms   trace_context_middleware 前置执行
+t=3ms   chat_stream 路由函数执行
+        - 创建 generator
+        - 返回 StreamingResponse
+t=4ms   trace_context_middleware 后置执行
+t=5ms   governance_middleware 后置执行
+        - 记录延迟 5ms
+        - dec inflight_requests
+        - 审计日志记录 SUCCESS
+t=5ms   响应头返回给客户端
+t=6ms   开始发送第一个 chunk (SSE 格式)
+
+trace_context_middleware: 追踪中间件，从请求头提取 trace/span，或生成 trace id，放入上下文
+governance_middleware: 治理中间件，白名单放行、限流、统计、审计日志、inflight计数
+"""
+app.middleware("http")(trace_context_middleware)
 
 
 @app.middleware("http")
 async def governance_middleware(request: Request, call_next):
     """为业务接口统一套上限流、审计和指标采集逻辑。"""
     if request.url.path in {"/healthz", "/v1/metrics", "/metrics"}:
-        return await call_next(request) #?
+        return await call_next(request) #! 健康和指标端点直接放行
 
     actor = request.headers.get("x-api-key", "anonymous")
     trace_id = current_trace_id()
@@ -117,7 +150,7 @@ async def governance_middleware(request: Request, call_next):
             latency_ms=latency_ms,
         )
         raise
-    finally:
+    finally: #! 无论成功失败都执行，保证 inflight 计数不会只增不减
         inflight_requests.dec()
 
 

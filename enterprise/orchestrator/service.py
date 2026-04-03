@@ -1,6 +1,9 @@
 ﻿from __future__ import annotations
 
-"""LangGraph 编排引擎的高层门面服务。"""
+"""
+LangGraph 编排引擎的高层门面服务。
+API 层与 LangGraph 引擎之间的门面。API 不直接操作图对象，而是统一通过这个服务
+"""
 
 import uuid
 from typing import Generator
