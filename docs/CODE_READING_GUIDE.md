@@ -363,3 +363,37 @@ flowchart TD
    服务类型定义在各模块；state 上的成员名定义在 lifespan 的赋值语句。
 5. 路由里的 orchestrator_service: OrchestratorService = app.state.orchestrator_service 只是本地变量+类型标注，不是给 state 定义字段。
    enterprise/api/app.py (line 187)
+
+
+
+**执行时机（stream_chat 生成器）**
+
+1. 路由函数先“创建生成器对象”，不会立刻执行函数体。见 [app.py:185](app://-/index.html?hostId=local) 和 [service.py:36](app://-/index.html?hostId=local)。
+2. chat_stream 返回 StreamingResponse(generator) 后，真正开始发送 body 时，框架才会 next(generator)。
+3. stream_chat 的第一句就是 result = self.chat(...)，所以**首次 next 会先跑完整编排**，然后才开始 yield 字符。见 [service.py:42](app://-/index.html?hostId=local)。
+4. 因此当前是“伪流式”：先算完整答案，再按字符输出（打字机效果），不是 LLM token 原生流。
+
+
+
+```mermaid
+sequenceDiagram
+    participant C as Client
+    participant API as "/v1/chat/stream"
+    participant G as "stream_chat(generator)"
+    participant LG as "engine.run -> graph.invoke"
+
+    C->>API: POST
+    API->>G: 调用 stream_chat(...)
+    G-->>API: 返回 generator（未执行函数体）
+    API-->>C: 返回 StreamingResponse（先发响应头）
+    C->>G: 首次拉取 chunk(next)
+    G->>LG: self.chat(...) -> LangGraph 全流程
+    LG-->>G: 完整 response 文本
+    loop 后续迭代
+        G-->>C: 每次 yield 1 个字符
+    end
+
+```
+
+
+

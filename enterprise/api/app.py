@@ -190,6 +190,7 @@ def chat_stream(req: ChatStreamRequest):
         session_id=req.session_id,
         trace_id=req.trace_id or current_trace_id(),
     )
+    #! 对同步生成器使用 iterate_in_threadpool
     return StreamingResponse(generator, media_type="text/plain; charset=utf-8")
 
 

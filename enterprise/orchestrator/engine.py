@@ -73,6 +73,7 @@ class OrchestratorEngine:
         intent = state["intent"]
         plan: list[dict[str, Any]] = []
 
+        #! 真实“分支”不靠 LangGraph 条件边，而是在节点内部 if
         if intent == "report":
             plan = [
                 {"fqdn": "enterprise.get_user_id", "args": {}},
@@ -163,6 +164,7 @@ class OrchestratorEngine:
         immediate_steps = [s for s in plan if s["fqdn"] != "gaode.get_weather"]
         deferred_weather = [s for s in plan if s["fqdn"] == "gaode.get_weather"]
 
+        #! 聊天链路中的并行是 ThreadPoolExecutor 手工并行，不是 LangGraph 并行节点
         max_workers = min(self.max_parallel, max(1, len(immediate_steps)))
         with ThreadPoolExecutor(max_workers=max_workers) as pool:
             futures = [pool.submit(run_step, step) for step in immediate_steps]
