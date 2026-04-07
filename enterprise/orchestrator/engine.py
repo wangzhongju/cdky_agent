@@ -1,6 +1,14 @@
 ﻿from __future__ import annotations
 
-"""负责聊天与报告请求的 LangGraph 编排引擎。"""
+"""LangGraph 编排引擎实现。
+
+该模块处于编排层核心位置，负责把用户输入转换为“可执行的能力调用流程”。
+它不关心能力本身如何实现（那是 ``CapabilityGateway`` 的职责），而是关心：
+- 以什么图结构组织节点
+- 以什么状态对象在节点间传递数据
+- 在 report / chat 两类请求中按什么顺序执行能力
+- 如何把能力结果收敛为最终回答
+"""
 
 import json
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -17,9 +25,16 @@ from utils.logger_handler import logger
 
 
 class OrchestratorEngine:
-    """持有编译后的图对象，以及各节点的具体实现。"""
+    """持有编译后的图对象，以及各节点执行逻辑。
+
+    一次请求的执行流程由该类统一管理：
+    - ``run`` 构造初始状态并驱动整张图
+    - 节点方法执行意图识别、规划、执行、复核和响应生成
+    - 通过 ``CostService``、``ModelRouter`` 接入治理能力
+    """
 
     def __init__(self, gateway: CapabilityGateway):
+        """装配编排依赖，并在初始化阶段编译图结构。"""
         self.gateway = gateway
         self.max_parallel = int(enterprise_conf.get("orchestrator", {}).get("max_parallel_capabilities", 4))
         self.cost_service = CostService()
@@ -27,7 +42,12 @@ class OrchestratorEngine:
         self.graph = self._build_graph().compile()
 
     def _build_graph(self):
-        """在启动时构建一次固定的编排流水线。"""
+        """构建固定节点拓扑并返回未编译图对象。
+
+        这里采用固定顺序边而非条件边：
+        ``IntentClassifier -> Planner -> CapabilityRouter -> Executor -> Reviewer -> Responder``。
+        真实分支决策在节点内部通过状态字段控制。
+        """
         graph = StateGraph(OrchestratorState)
 
         graph.add_node("IntentClassifier", self.intent_classifier)
@@ -48,7 +68,10 @@ class OrchestratorEngine:
         return graph
 
     def run(self, query: str, session_id: str, trace_id: str) -> dict[str, Any]:
-        """构造初始状态并执行编译后的图。"""
+        """构造初始状态并执行编译后的图。
+
+        返回值是图执行后的最终状态快照，供 ``OrchestratorService`` 序列化输出。
+        """
         state: OrchestratorState = {
             "query": query,
             "session_id": session_id,
@@ -60,7 +83,12 @@ class OrchestratorEngine:
         return self.graph.invoke(state)
 
     def intent_classifier(self, state: OrchestratorState) -> OrchestratorState:
-        """将请求划分到图中使用的粗粒度执行分支。"""
+        """识别粗粒度意图并写回状态。
+
+        当前使用关键词启发式规则：
+        - 命中“报告/使用记录/月报/统计” -> ``report``
+        - 否则 -> ``chat``
+        """
         text = state["query"]
         report_keywords = ["报告", "使用记录", "月报", "统计"]
         intent = "report" if any(k in text for k in report_keywords) else "chat"
@@ -68,7 +96,12 @@ class OrchestratorEngine:
         return state
 
     def planner(self, state: OrchestratorState) -> OrchestratorState:
-        """把识别出的意图翻译成可执行的能力计划。"""
+        """把意图翻译为能力执行计划。
+
+        计划元素统一为 ``{"fqdn": "...", "args": ...}``：
+        - ``report`` 场景生成固定串行计划
+        - ``chat`` 场景按查询内容拼装天气与 RAG 计划
+        """
         query = state["query"]
         intent = state["intent"]
         plan: list[dict[str, Any]] = []
@@ -92,7 +125,10 @@ class OrchestratorEngine:
         return state
 
     def capability_router(self, state: OrchestratorState) -> OrchestratorState:
-        """保留稳定的路由扩展点，便于后续加入策略化分流。"""
+        """能力路由扩展点。
+
+        当前实现为透传节点，主要用于给后续策略化路由预留稳定插点。
+        """
         return state
 
     def executor(self, state: OrchestratorState) -> OrchestratorState:
@@ -106,10 +142,10 @@ class OrchestratorEngine:
         return self._execute_general_flow(state, plan)
 
     def _execute_report_flow(self, state: OrchestratorState, plan: list[dict[str, Any]]) -> OrchestratorState:
-        """按严格顺序执行报告生成流程。
+        """按严格顺序执行报告链路。
 
-        报告链路强依赖前序步骤产出的上下文，因此这里采用串行执行，
-        而不是并行化。
+        报告链路存在明显的数据依赖：``user_id/month -> external_data -> report``。
+        因此采用串行调用，并把关键步骤产出写入 ``capability_results`` 与 ``report_context``。
         """
         results: list[dict[str, Any]] = []
         trace_id = state["trace_id"]
@@ -145,13 +181,18 @@ class OrchestratorEngine:
         return state
 
     def _execute_general_flow(self, state: OrchestratorState, plan: list[dict[str, Any]]) -> OrchestratorState:
-        """在安全前提下，以有限并行度执行通用聊天能力。"""
+        """以有限并行度执行通用聊天链路。
+
+        执行策略：
+        - 先并行执行“非天气补全”步骤（如定位、RAG）
+        - 再执行依赖定位结果的天气步骤（延迟参数 ``__DEFERRED_CITY__``）
+        """
         results: list[dict[str, Any]] = []
         trace_id = state["trace_id"]
         city = ""
 
         def run_step(step: dict[str, Any]):
-            """解析延迟参数，并调用单个能力。"""
+            """解析步骤参数并调用单个能力。"""
             fqdn = step["fqdn"]
             args = step["args"]
             if args == "__DEFERRED_CITY__":
@@ -182,7 +223,7 @@ class OrchestratorEngine:
         return state
 
     def reviewer(self, state: OrchestratorState) -> OrchestratorState:
-        """把原始能力输出归并成一份回答草稿。"""
+        """把能力原始输出归并为可读草稿。"""
         if not state.get("capability_results"):
             state["response"] = "未获取到任何可用能力结果。"
             return state
@@ -203,10 +244,13 @@ class OrchestratorEngine:
         return state
 
     def responder(self, state: OrchestratorState) -> OrchestratorState:
-        """对聊天类响应再做一次最终 LLM 汇总。
+        """对聊天草稿执行最终 LLM 汇总，并记录成本元数据。
 
-        报告类请求会跳过这一步，因为 ``report.report_writer`` 已经直接产出
-        最终报告正文。
+        ``report`` 场景直接复用报告正文，不进入二次汇总。
+        ``chat`` 场景会：
+        - 通过 ``ModelRouter`` 选模型
+        - 调用模型生成最终响应
+        - 通过 ``CostService`` 落库并更新指标
         """
         if state["intent"] == "report":
             return state
