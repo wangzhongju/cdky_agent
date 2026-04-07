@@ -97,7 +97,7 @@ async def trace_context_middleware(request: Request, call_next):
     with tracer.start_as_current_span(f"{request.method} {request.url.path}") as span:
         span.set_attribute("trace_id", trace_id)
         span.set_attribute("actor", actor)
-        response = await call_next(request)
+        response = await call_next(request)    #? 等待接口响应？如：进入路由 chat_stream
         duration_ms = int((time.time() - start) * 1000)
         span.set_attribute("latency_ms", duration_ms)
 

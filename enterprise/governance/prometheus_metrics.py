@@ -2,6 +2,18 @@
 
 from prometheus_client import Counter, Histogram, Gauge, generate_latest, CONTENT_TYPE_LATEST
 
+"""
+`prometheus_client` 是 Python 官方的 Prometheus 指标客户端库，用于在 Python 应用中定义和暴露监控指标。
+Prometheus 通过拉取（Pull）方式从 `/metrics` 端点获取这些指标数据
+解决的问题：
+- 编排器的请求量和延迟
+- 各能力的调用成功率
+- LLM 调用次数和成本
+- RAG 检索效率
+- 系统资源使用情况
+Counter只增不减   Histogram分布统计   Gauge可增可减
+"""
+
 #! API 请求总数：统计 API 调用量、按接口维度分析请求分布、计算错误率（与成功请求对比）
 api_requests_total = Counter(
     "enterprise_api_requests_total",

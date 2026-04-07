@@ -119,7 +119,7 @@ async def governance_middleware(request: Request, call_next):
     inflight_requests.inc()   #! 指标：活跃数统计
 
     try:
-        response = await call_next(request)   #? 逻辑是什么
+        response = await call_next(request)   #! 进入 trace_context_middleware 的前置
         latency_ms = int((time.time() - start) * 1000)
         metrics_service.incr("requests_success")
         api_requests_total.labels(method=request.method, path=request.url.path, status="success").inc()

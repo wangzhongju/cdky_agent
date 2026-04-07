@@ -5,6 +5,13 @@
 
 对照工程：
 - enterprise/governance/tracing.py
+
+contextvars：
+用于管理**上下文变量**（Context Variables）。它提供了在异步编程中传递和隔离上下文数据的能力，类似于线程本地存储，但专门为**异步/协程**设计
+解决的问题：
+- 全局变量并发不安全
+- Thread Local 协程不安全
+- 显示传递方式代码冗长
 """
 
 import asyncio
