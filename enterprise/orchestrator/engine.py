@@ -119,6 +119,8 @@ class OrchestratorEngine:
             if "天气" in query:
                 plan.append({"fqdn": "gaode.get_user_location", "args": {}})
                 plan.append({"fqdn": "gaode.get_weather", "args": "__DEFERRED_CITY__"})
+            if any(token in query for token in ("http://", "https://", "网页", "链接", "URL", "url")):
+                plan.append({"fqdn": "knowledge.webpage_brief", "args": {"query": query}})
             plan.append({"fqdn": "knowledge.rag_summarize", "args": {"query": query}})
 
         state["planned_capabilities"] = plan
@@ -237,6 +239,8 @@ class OrchestratorEngine:
         for row in state["capability_results"]:
             if row["fqdn"] == "knowledge.rag_summarize":
                 lines.append(str(row["result"]))
+            elif row["fqdn"] == "knowledge.webpage_brief":
+                lines.append(f"网页摘要信息：{row['result']}")
             elif row["fqdn"] == "gaode.get_weather":
                 lines.append(f"补充天气信息：{row['result']}")
 

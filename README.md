@@ -22,6 +22,8 @@
 - [代码阅读指南与类图](docs/CODE_READING_GUIDE.md)
 - [逐文件精读版](docs/FILE_BY_FILE_DEEP_DIVE.md)
 - [字段级数据血缘图](docs/FIELD_DATA_LINEAGE.md)
+- [MCP 扩展指南](docs/MCP_EXTENSION_GUIDE.md)
+- [Skills 扩展指南](docs/SKILL_EXTENSION_GUIDE.md)
 - [库用法练习场](library_playground/README.md)
 
 ## 当前系统架构
@@ -33,7 +35,7 @@ Client (Streamlit / API Caller)
         -> Orchestrator Service (LangGraph)
             -> Capability Gateway
                 -> Skill Runtime / Registry
-                -> MCP Adapter (retry + timeout + circuit breaker)
+                -> MCP Runtime (protocol client + discovery + resilience)
             -> A2A Runtime (Redis queue + Postgres state)
 ```
 
@@ -54,6 +56,8 @@ Client (Streamlit / API Caller)
 - `GET /v1/skills`
 - `PATCH /v1/skills/{skill_id}`
 - `GET /v1/capabilities`
+- `GET /v1/mcp/servers`
+- `POST /v1/mcp/reload`
 - `GET /v1/metrics`（Redis 快照）
 - `GET /metrics`（Prometheus）
 - `GET /healthz?deep=true`

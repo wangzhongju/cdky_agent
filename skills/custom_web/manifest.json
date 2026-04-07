@@ -1,0 +1,17 @@
+{
+  "id": "custom.web_skill",
+  "name": "custom-web-skill",
+  "version": "0.1.0",
+  "entrypoint": "skills.custom_web.entrypoint:register_web_skills",
+  "tool_schemas": [
+    {
+      "name": "webpage_brief",
+      "args": {
+        "query": "string"
+      }
+    }
+  ],
+  "required_permissions": ["network"],
+  "dependencies": ["requests"],
+  "enabled": true
+}

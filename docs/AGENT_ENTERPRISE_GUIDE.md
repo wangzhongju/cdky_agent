@@ -42,6 +42,9 @@
 - 统一挂载到 `CapabilityGateway`
 - 支持：超时、重试、熔断、降级
 - 同名能力通过 `namespace.tool` 规避冲突
+- 支持协议层热重载与状态查询：
+  - `GET /v1/mcp/servers`
+  - `POST /v1/mcp/reload`
 
 ### 3.3 LangGraph 编排
 

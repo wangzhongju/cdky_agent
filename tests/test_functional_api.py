@@ -71,3 +71,15 @@ def test_prometheus_metrics_endpoint():
     body = resp.text
     assert "enterprise_api_requests_total" in body
     assert "enterprise_a2a_tasks_total" in body
+
+
+def test_mcp_management_endpoints():
+    resp = requests.get(f"{BASE}/v1/mcp/servers", headers=HEADERS, timeout=10)
+    assert resp.status_code == 200
+    assert isinstance(resp.json(), list)
+
+    reload_resp = requests.post(f"{BASE}/v1/mcp/reload", headers=HEADERS, timeout=15)
+    assert reload_resp.status_code == 200
+    payload = reload_resp.json()
+    assert payload.get("status") == "ok"
+    assert isinstance(payload.get("servers"), list)

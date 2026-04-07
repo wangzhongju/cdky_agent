@@ -308,3 +308,212 @@
 docker compose -f docker/docker-compose-dev.yaml up -d --force-recreate --no-deps agent-api agent-dev
 ```
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# MCP/Skills 架构重构方案（协议层与能力层解耦）
+
+## Summary
+
+- 目标：把当前“自定义 MCP 适配器 + Skill 注册”重构为两层清晰架构：MCP=协议通信层、Skills=能力封装层，并满足你提出的 7 条需求。
+- 已锁定决策：
+
+1. MCP 规范以 2025-11-25 为主，保留有限兼容回退。
+2. 网页抓取 MCP 采用“静态抓取增强”方案（不做 JS 渲染）。
+3. 采用“两阶段迁移”。
+4. MCP 服务接入采用“配置驱动 + 热重载”。
+5. 新增“只读状态 + 重载”管理接口。
+
+## Key Changes
+
+1. 架构重分层（核心重构）
+
+   - 新建 enterprise/mcp/ 作为协议层，职责仅包含：MCP client/session、initialize/lifecycle、tools/list 动态发现、tools/call 调用、传输与错误映射。
+   - enterprise/capability/ 收敛为编排侧聚合层：只做能力目录、路由、审计、指标，不再承担 MCP 协议细节。
+   - 保持 OrchestratorEngine -> CapabilityGateway.invoke_capability(...) 调用形态不变，降低上层改动风险。
+
+2. MCP 协议层实现（外部服务 + 自定义工具）
+
+   - 支持两类 MCP server 连接：
+
+3. stdio（本地进程 MCP server）
+
+4. streamable_http
+
+   （远端 MCP server）
+
+   - 动态发现：启动与 reload 时对每个 server 执行 tools/list，生成运行时能力目录。
+   - 动态调用：按 server_id + tool_name 路由 tools/call，统一超时、重试、熔断、审计、指标。
+   - 配置模型升级（兼容旧配置）：
+
+5. 新 schema 包含 transport/command|url/headers/timeout/enabled。
+
+6. 旧
+
+    
+
+   config/mcp.yml
+
+    
+
+   字段保留兼容解析并给出弃用告警（Phase 1）。
+
+   - 新增 MCP 管理 API（非破坏）：
+
+7. GET /v1/mcp/servers：连接状态、发现到的工具数、最后刷新时间
+
+8. POST /v1/mcp/reload：重建 MCP 连接与工具目录
+
+9. Skills 能力层升级（静态注册 + 动态加载）
+
+   - 保留现有 manifest 驱动机制，同时补齐“外部 Skills 包”接入流程（目录扫描 + entrypoint 加载）。
+   - Skill entrypoint 兼容两种签名：
+
+1. 旧版：无参返回能力列表
+
+2. 新版：接收
+
+    
+
+   SkillContext
+
+   （可调用 MCP、读配置、写 trace）
+
+   - 新增 SkillContext.call_mcp(...)，使 Skills 可直接复用 MCP 工具（满足“Skills 可使用 MCP”）。
+   - 增加一个自定义 Skills 包（简单且可演示）：
+
+3. 示例能力：读取 URL 并生成简要摘要/要点
+
+4. 内部通过 SkillContext.call_mcp 调用网页抓取 MCP 工具
+
+5. 可被编排器按关键词（如“网页/链接/http”）纳入计划
+
+6. “MCP 作为 Skills 暴露方式”实现
+
+   - 增加 Skills->MCP 桥接 server（本地 MCP server）：
+
+7. 读取白名单 Skills 能力
+
+8. 对外以 MCP tools 暴露
+
+9. 供外部 MCP host/client 调用，或供本项目作为一个 MCP server 接入
+
+   - 这样形成双向能力复用：Skills 调 MCP 与 Skills 被 MCP 暴露 同时成立。
+
+10. 新增网页抓取 MCP（你要求的新增能力）
+
+    - 提供自定义 MCP tool（静态抓取增强）：
+
+11. 输入：url、max_chars、extract_links、timeout
+
+12. 输出：
+
+    title
+
+    、
+
+    text
+
+    、
+
+    links
+
+    、
+
+    content_type
+
+    、
+
+    status_code
+
+    - 安全与治理默认策略：
+
+13. 超时与响应体大小限制
+
+14. content-type 白名单（text/html、text/plain 等）
+
+15. 私网地址/回环地址拦截（SSRF 基线）
+
+16. 审计记录 URL（脱敏）与调用耗时
+
+17. 文档交付（完整扩展流程）
+
+    - 新增 docs/MCP_EXTENSION_GUIDE.md：
+
+18. MCP 架构说明（client/server/transport/lifecycle）
+
+19. 新接一个外部 MCP server 的完整步骤
+
+20. 新增一个自定义 MCP tool/server 的完整步骤
+
+21. 配置、热重载、验证、排障清单
+
+    - 新增 docs/SKILL_EXTENSION_GUIDE.md：
+
+22. Skills 包结构、manifest 字段、entrypoint 规范
+
+23. 新增一个外部 Skills 包完整步骤
+
+24. Skill 调 MCP 的标准写法
+
+25. Skills 通过 MCP 暴露的桥接流程
+
+26. 调试与验收 checklist
+
+27. 两阶段迁移执行
+
+    - Phase 1（兼容上线）：
+
+28. 引入新 MCP 协议层和 Skills context 机制
+
+29. 保留旧路径兼容，现网能力不回退
+
+30. 上线网页抓取 MCP 与示例技能包、文档与测试
+
+    - Phase 2（收敛清理）：
+
+31. 将旧硬编码 MCP 注册迁入标准 MCP server 配置
+
+32. 删除遗留适配逻辑与重复实现
+
+33. 固化最终接口与配置规范
+
+## Test Plan
+
+- 单元测试：
+
+1. MCP 配置解析与旧配置兼容映射
+2. MCP tools/list 发现与 tools/call 路由
+3. Skill 动态加载、entrypoint 新旧签名兼容
+4. SkillContext 调 MCP 行为
+   - 集成测试：
+5. /v1/capabilities 可见 skill+mcp 能力并含来源标识
+6. /v1/mcp/servers、/v1/mcp/reload 正常工作
+7. 网页抓取 MCP 可调用且返回结构化结果
+8. 自定义 skill 成功调用网页抓取 MCP
+   - 回归测试：
+9. 现有 /v1/chat/stream、/v1/tasks、/v1/skills 全量通过
+
+1. 指标、审计、trace 链路不中断
+
+## Assumptions / Defaults
+
+- MCP 以 2025-11-25 为主；兼容回退仅覆盖本项目需要的基础能力（initialize、tools/list、tools/call、stdio/streamable_http）。
+- 网页抓取只做静态抓取，不引入浏览器渲染。
+- 维持现有 API 契约，新增接口采用“只增不破”。
+- 文档与示例均以中文提供，示例默认可在当前仓库直接运行。

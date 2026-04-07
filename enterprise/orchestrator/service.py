@@ -62,3 +62,11 @@ class OrchestratorService:
     def set_skill_enabled(self, skill_id: str, enabled: bool) -> bool:
         """切换技能启用状态，并在需要时重载能力目录。"""
         return self.gateway.set_skill_enabled(skill_id, enabled)
+
+    def list_mcp_servers(self) -> list[dict]:
+        """返回 MCP server 的连接和发现状态。"""
+        return self.gateway.list_mcp_servers()
+
+    def reload_mcp(self) -> dict:
+        """重建 MCP 连接并刷新 MCP 能力目录。"""
+        return self.gateway.reload_mcp()

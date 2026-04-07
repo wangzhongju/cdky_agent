@@ -239,3 +239,17 @@ def list_capabilities():
     """返回编排器当前可见的扁平化能力目录。"""
     orchestrator_service: OrchestratorService = app.state.orchestrator_service
     return orchestrator_service.list_capabilities()
+
+
+@app.get("/v1/mcp/servers")
+def list_mcp_servers():
+    """返回 MCP server 连接状态与工具发现快照。"""
+    orchestrator_service: OrchestratorService = app.state.orchestrator_service
+    return orchestrator_service.list_mcp_servers()
+
+
+@app.post("/v1/mcp/reload")
+def reload_mcp():
+    """热重载 MCP 配置、连接与动态能力目录。"""
+    orchestrator_service: OrchestratorService = app.state.orchestrator_service
+    return orchestrator_service.reload_mcp()
