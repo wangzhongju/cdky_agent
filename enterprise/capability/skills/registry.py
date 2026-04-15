@@ -20,6 +20,11 @@ class SkillRegistryService:
             self.repo.upsert(m)
         self._refresh_cache()
 
+    def sync_skills(self, skills: list[dict[str, Any]]) -> None:
+        for skill in skills:
+            self.repo.upsert(skill)
+        self._refresh_cache()
+
     def list_skills(self) -> list[dict[str, Any]]:
         cached = self.redis.get(self.CACHE_KEY)
         if cached:

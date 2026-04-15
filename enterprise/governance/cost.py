@@ -29,17 +29,16 @@ class CostService:
         out_cost = (output_tokens / 1000.0) * float(price.get("output_per_1k", 0.0))
         return in_cost + out_cost
 
-    def record(self, trace_id: str, actor: str, model_name: str, input_text: str, output_text: str) -> dict:
-        in_tokens, out_tokens = self.estimate_tokens(input_text, output_text)
-        cost = self.estimate_cost(model_name, in_tokens, out_tokens)
+    def record_usage(self, trace_id: str, actor: str, model_name: str, input_tokens: int, output_tokens: int) -> dict:
+        cost = self.estimate_cost(model_name, input_tokens, output_tokens)
 
         with SessionLocal() as session:
             row = CostRecord(
                 trace_id=trace_id,
                 actor=actor,
                 model_name=model_name,
-                input_tokens=in_tokens,
-                output_tokens=out_tokens,
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
                 estimated_cost=f"{cost:.6f}",
                 created_at=datetime.utcnow(),
             )
@@ -54,7 +53,17 @@ class CostService:
             "trace_id": trace_id,
             "actor": actor,
             "model_name": model_name,
-            "input_tokens": in_tokens,
-            "output_tokens": out_tokens,
+            "input_tokens": input_tokens,
+            "output_tokens": output_tokens,
             "estimated_cost": float(f"{cost:.6f}"),
         }
+
+    def record(self, trace_id: str, actor: str, model_name: str, input_text: str, output_text: str) -> dict:
+        in_tokens, out_tokens = self.estimate_tokens(input_text, output_text)
+        return self.record_usage(
+            trace_id=trace_id,
+            actor=actor,
+            model_name=model_name,
+            input_tokens=in_tokens,
+            output_tokens=out_tokens,
+        )

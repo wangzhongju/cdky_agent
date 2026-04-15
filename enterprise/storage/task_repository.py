@@ -28,6 +28,7 @@ class TaskRepository:
                 retry_count=0,
                 trace_id=payload["trace_id"],
                 goal_hash=self.build_goal_hash(payload["task_id"], payload["goal"]),
+                permission_mode=payload.get("permission_mode", "default"),
                 created_at=now,
                 updated_at=now,
             )

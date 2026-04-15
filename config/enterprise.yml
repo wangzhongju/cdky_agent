@@ -1,6 +1,33 @@
-﻿api:
+api:
   host: 0.0.0.0
   port: 8000
+
+provider:
+  type: dashscope
+  model: qwen3-max
+  timeout_seconds: 60
+  max_retries: 3
+  base_delay_seconds: 1
+  max_delay_seconds: 30
+
+session:
+  recent_message_limit: 12
+  max_turns: 8
+  history_page_size: 20
+
+context:
+  max_prompt_tokens: 12000
+  keep_last_messages: 6
+
+permission:
+  mode: default
+  allowed_tools: []
+  denied_tools: []
+  denied_commands:
+    - "rm -rf *"
+    - "shutdown *"
+    - "reboot *"
+  path_rules: []
 
 infra:
   database_url: ${DATABASE_URL}

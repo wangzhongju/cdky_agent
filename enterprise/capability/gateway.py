@@ -1,9 +1,10 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
+import asyncio
 import time
+from pathlib import Path
 from typing import Any
 
-from agent.tools.agent_tools import get_weather, get_user_location, fetch_external_data
 from enterprise.capability.skills.registry import SkillRegistryService
 from enterprise.capability.skills.runtime import SkillRuntime
 from enterprise.capability.mcp.adapter import MCPAdapter
@@ -11,8 +12,12 @@ from enterprise.capability.types import Capability
 from enterprise.governance.audit import AuditService
 from enterprise.governance.prometheus_metrics import capability_invocations_total
 from enterprise.governance.tracing import current_actor, current_trace_id
+from harness.knowledge.service import KnowledgeService, ReportDataService
+from harness.tools.base import ToolExecutionContext
+from harness.tools.registry import build_default_tool_registry
 from utils.config_handler import mcp_conf
 from utils.logger_handler import logger
+from utils.path_tool import get_abs_path
 
 
 class CapabilityGateway:
@@ -22,11 +27,21 @@ class CapabilityGateway:
         self.skill_registry = SkillRegistryService()
         self.mcp_adapter = MCPAdapter()
         self.audit = AuditService()
+        self.workspace = Path(get_abs_path(".")).resolve()
+        self.knowledge_service = KnowledgeService()
+        self.report_service = ReportDataService()
+        self.tool_registry = build_default_tool_registry(
+            cwd=self.workspace,
+            knowledge_service=self.knowledge_service,
+            report_service=self.report_service,
+        )
         self._load_all()
 
     def _load_all(self) -> None:
         manifests = self.skill_runtime.discover_manifests()
+        markdown_skills = self.skill_runtime.discover_markdown_skills()
         self.skill_registry.sync_manifests(manifests)
+        self.skill_registry.sync_skills(markdown_skills)
 
         enabled_map = {row["id"]: row for row in self.skill_registry.list_skills()}
 
@@ -39,6 +54,7 @@ class CapabilityGateway:
             for capability in loader():
                 self._capabilities[capability.fqdn] = capability
 
+        self._register_tool_capabilities()
         self._load_mcp_adapters()
 
     def _load_mcp_adapters(self) -> None:
@@ -51,7 +67,7 @@ class CapabilityGateway:
                 namespace=gaode["namespace"],
                 name="get_weather",
                 description="高德天气MCP",
-                handler=lambda city: get_weather.invoke({"city": city}),
+                handler=lambda city: self._invoke_tool("gaode_get_weather", city=city),
                 timeout_seconds=int(gaode.get("timeout_seconds", 5)),
                 max_retries=int(gaode.get("max_retries", 2)),
                 failure_threshold=int(gaode.get("failure_threshold", 5)),
@@ -61,7 +77,7 @@ class CapabilityGateway:
                 namespace=gaode["namespace"],
                 name="get_user_location",
                 description="高德定位MCP",
-                handler=lambda: get_user_location.invoke({}),
+                handler=lambda: self._invoke_tool("gaode_get_location"),
                 timeout_seconds=int(gaode.get("timeout_seconds", 5)),
                 max_retries=int(gaode.get("max_retries", 2)),
                 failure_threshold=int(gaode.get("failure_threshold", 5)),
@@ -74,7 +90,11 @@ class CapabilityGateway:
                 namespace=enterprise_srv["namespace"],
                 name="fetch_external_data",
                 description="企业数据MCP",
-                handler=lambda user_id, month: fetch_external_data.invoke({"user_id": user_id, "month": month}),
+                handler=lambda user_id, month: self._invoke_tool(
+                    "fetch_external_report_data",
+                    user_id=user_id,
+                    month=month,
+                ),
                 timeout_seconds=int(enterprise_srv.get("timeout_seconds", 5)),
                 max_retries=int(enterprise_srv.get("max_retries", 2)),
                 failure_threshold=int(enterprise_srv.get("failure_threshold", 5)),
@@ -87,6 +107,28 @@ class CapabilityGateway:
     def reload(self) -> None:
         self._capabilities = {}
         self._load_all()
+
+    def _register_tool_capabilities(self) -> None:
+        for tool in self.tool_registry.list_tools():
+            capability = Capability(
+                name=tool.name,
+                namespace="tool",
+                description=tool.description,
+                source="tool",
+                schema=tool.input_model.model_json_schema(),
+                handler=lambda _tool=tool, **kwargs: self._invoke_tool(_tool.name, **kwargs),
+            )
+            self._capabilities[capability.fqdn] = capability
+
+    def _invoke_tool(self, tool_name: str, **kwargs) -> Any:
+        tool = self.tool_registry.get(tool_name)
+        if not tool:
+            raise KeyError(f"tool not registered: {tool_name}")
+        arguments = tool.input_model.model_validate(kwargs)
+        result = asyncio.run(tool.execute(arguments, ToolExecutionContext(cwd=self.workspace)))
+        if result.is_error:
+            raise RuntimeError(result.output)
+        return result.output
 
     def list_capabilities(self) -> list[dict[str, Any]]:
         return [

@@ -1,11 +1,11 @@
-"""
-yaml
-k: v
-"""
-import os
-import yaml
-from utils.path_tool import get_abs_path
+"""Configuration loading helpers."""
+
 from typing import Any
+import os
+
+import yaml
+
+from utils.path_tool import get_abs_path
 
 
 def _load_single_dotenv(env_path: str, encoding: str = "utf-8"):
@@ -69,6 +69,18 @@ def load_mcp_config(config_path: str = get_abs_path("config/mcp.yml"), encoding:
         return _resolve_env_placeholders(yaml.load(f, Loader=yaml.FullLoader))
 
 
+def load_hooks_config(config_path: str = get_abs_path("config/hooks.yml"), encoding: str = "utf-8"):
+    if not os.path.exists(config_path):
+        return {"pre_tool_use": [], "post_tool_use": []}
+
+    with open(config_path, "r", encoding=encoding) as f:
+        payload = yaml.load(f, Loader=yaml.FullLoader) or {}
+
+    payload.setdefault("pre_tool_use", [])
+    payload.setdefault("post_tool_use", [])
+    return _resolve_env_placeholders(payload)
+
+
 def _resolve_env_placeholders(value: Any) -> Any:
     if isinstance(value, dict):
         return {k: _resolve_env_placeholders(v) for k, v in value.items()}
@@ -98,6 +110,7 @@ prompts_conf = load_prompts_config()
 agent_conf = apply_env_overrides(load_agent_config())
 enterprise_conf = load_enterprise_config()
 mcp_conf = load_mcp_config()
+hooks_conf = load_hooks_config()
 
 
 if __name__ == '__main__':

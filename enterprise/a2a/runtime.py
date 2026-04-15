@@ -43,7 +43,15 @@ class A2ARuntime:
     def stop(self) -> None:
         self._stop.set()
 
-    def submit_task(self, goal: str, constraints: dict, context_ref: dict, input_data: dict, trace_id: str | None = None) -> dict:
+    def submit_task(
+        self,
+        goal: str,
+        constraints: dict,
+        context_ref: dict,
+        input_data: dict,
+        trace_id: str | None = None,
+        permission_mode: str = "default",
+    ) -> dict:
         task = A2ATaskPayload(
             task_id=str(uuid.uuid4()),
             goal=goal,
@@ -51,6 +59,7 @@ class A2ARuntime:
             context_ref=context_ref,
             input=input_data,
             trace_id=trace_id or str(uuid.uuid4()),
+            permission_mode=permission_mode,
         )
 
         self.repo.create_task(task.model_dump(mode="json"))
@@ -58,7 +67,12 @@ class A2ARuntime:
         self.metrics.incr("tasks_submitted")
         a2a_tasks_total.labels(status="submitted").inc()
 
-        return {"task_id": task.task_id, "status": task.status.value, "trace_id": task.trace_id}
+        return {
+            "task_id": task.task_id,
+            "status": task.status.value,
+            "trace_id": task.trace_id,
+            "permission_mode": task.permission_mode,
+        }
 
     def get_task(self, task_id: str) -> dict | None:
         row = self.repo.get_task(task_id)
@@ -77,6 +91,7 @@ class A2ARuntime:
             "error": row.error,
             "retry_count": row.retry_count,
             "trace_id": row.trace_id,
+            "permission_mode": row.permission_mode,
             "created_at": row.created_at.isoformat(),
             "updated_at": row.updated_at.isoformat(),
         }
@@ -104,6 +119,7 @@ class A2ARuntime:
                 message=task.goal,
                 session_id=task.context_ref.get("session_id"),
                 trace_id=task.trace_id,
+                permission_mode=task.permission_mode,
             )
             self.repo.update_status(task.task_id, TaskStatus.REVIEWING.value, result=chat_result)
             self.repo.update_status(task.task_id, TaskStatus.COMPLETED.value, result=chat_result)

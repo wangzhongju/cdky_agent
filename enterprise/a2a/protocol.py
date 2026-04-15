@@ -27,5 +27,6 @@ class A2ATaskPayload(BaseModel):
     error: str = ""
     retry_count: int = 0
     trace_id: str
+    permission_mode: str = "default"
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)

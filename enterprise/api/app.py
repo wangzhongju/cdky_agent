@@ -1,13 +1,19 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import time
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import Response, StreamingResponse
+from fastapi.responses import JSONResponse, Response, StreamingResponse
 
 from enterprise.a2a.runtime import A2ARuntime
-from enterprise.api.schemas import ChatStreamRequest, TaskCreateRequest, SkillPatchRequest
+from enterprise.api.schemas import (
+    ApprovalDecisionRequest,
+    ChatResumeRequest,
+    ChatStreamRequest,
+    SkillPatchRequest,
+    TaskCreateRequest,
+)
 from enterprise.governance.audit import AuditService
 from enterprise.governance.health import HealthService
 from enterprise.governance.metrics import MetricsService
@@ -71,6 +77,7 @@ async def governance_middleware(request: Request, call_next):
     try:
         response = await call_next(request)
         latency_ms = int((time.time() - start) * 1000)
+        response.headers["x-trace-id"] = trace_id
         metrics_service.incr("requests_success")
         api_requests_total.labels(method=request.method, path=request.url.path, status="success").inc()
         api_request_latency_ms.labels(method=request.method, path=request.url.path).observe(latency_ms)
@@ -129,14 +136,42 @@ def prometheus_metrics():
 
 
 @app.post("/v1/chat/stream")
-def chat_stream(req: ChatStreamRequest):
+async def chat_stream(req: ChatStreamRequest, request: Request):
     orchestrator_service: OrchestratorService = app.state.orchestrator_service
+    actor = request.headers.get("x-api-key", "anonymous")
     generator = orchestrator_service.stream_chat(
         message=req.message,
         session_id=req.session_id,
         trace_id=req.trace_id or current_trace_id(),
+        actor=actor,
+        permission_mode=req.permission_mode,
     )
-    return StreamingResponse(generator, media_type="text/plain; charset=utf-8")
+    response = StreamingResponse(generator, media_type="application/x-ndjson")
+    response.headers["x-trace-id"] = req.trace_id or current_trace_id()
+    return response
+
+
+@app.post("/v1/chat/resume")
+async def chat_resume(req: ChatResumeRequest, request: Request):
+    orchestrator_service: OrchestratorService = app.state.orchestrator_service
+    actor = request.headers.get("x-api-key", "anonymous")
+    generator = orchestrator_service.resume_chat(
+        session_id=req.session_id,
+        trace_id=req.trace_id or current_trace_id(),
+        actor=actor,
+    )
+    response = StreamingResponse(generator, media_type="application/x-ndjson")
+    response.headers["x-trace-id"] = req.trace_id or current_trace_id()
+    return response
+
+
+@app.post("/v1/approvals/{approval_id}")
+def decide_approval(approval_id: str, req: ApprovalDecisionRequest):
+    orchestrator_service: OrchestratorService = app.state.orchestrator_service
+    result = orchestrator_service.decide_approval(approval_id, req.decision)
+    if not result:
+        raise HTTPException(status_code=404, detail="approval not found")
+    return result
 
 
 @app.post("/v1/tasks")
@@ -148,6 +183,7 @@ def create_task(req: TaskCreateRequest):
         context_ref=req.context_ref,
         input_data=req.input,
         trace_id=req.trace_id or current_trace_id(),
+        permission_mode=req.permission_mode or "default",
     )
 
 
@@ -179,3 +215,27 @@ def patch_skill(skill_id: str, req: SkillPatchRequest):
 def list_capabilities():
     orchestrator_service: OrchestratorService = app.state.orchestrator_service
     return orchestrator_service.list_capabilities()
+
+
+@app.get("/v1/sessions")
+def list_sessions(limit: int = 20):
+    orchestrator_service: OrchestratorService = app.state.orchestrator_service
+    return orchestrator_service.list_sessions(limit=limit)
+
+
+@app.get("/v1/sessions/{session_id}")
+def get_session(session_id: str):
+    orchestrator_service: OrchestratorService = app.state.orchestrator_service
+    session = orchestrator_service.get_session(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="session not found")
+    return session
+
+
+@app.get("/v1/sessions/{session_id}/messages")
+def get_session_messages(session_id: str):
+    orchestrator_service: OrchestratorService = app.state.orchestrator_service
+    session = orchestrator_service.get_session(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="session not found")
+    return JSONResponse(content=orchestrator_service.list_session_messages(session_id))

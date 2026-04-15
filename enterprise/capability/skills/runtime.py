@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+from harness.skills.loader import load_skills
 from utils.logger_handler import logger
 
 
@@ -23,6 +24,29 @@ REQUIRED_FIELDS = {
 class SkillRuntime:
     def __init__(self, skill_dir: str = "skills"):
         self.skill_dir = Path(skill_dir)
+
+    def discover_markdown_skills(self) -> list[dict[str, Any]]:
+        skills: list[dict[str, Any]] = []
+        for skill in load_skills(self.skill_dir):
+            skills.append(
+                {
+                    "id": skill.id,
+                    "name": skill.name,
+                    "description": skill.description,
+                    "path": skill.path,
+                    "version": "1.0.0",
+                    "entrypoint": skill.path,
+                    "tool_schemas": [],
+                    "required_permissions": [],
+                    "dependencies": [],
+                    "tags": skill.tags,
+                    "triggers": skill.triggers,
+                    "allowed_tools": skill.allowed_tools,
+                    "source": "markdown",
+                    "enabled": skill.enabled,
+                }
+            )
+        return skills
 
     def discover_manifests(self) -> list[dict[str, Any]]:
         manifests: list[dict[str, Any]] = []
