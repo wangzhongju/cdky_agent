@@ -1,20 +1,40 @@
-﻿api:
+api:
   host: 0.0.0.0
   port: 8000
 
 infra:
   database_url: ${DATABASE_URL}
   redis_url: ${REDIS_URL}
-  redis_queue_key: a2a:task_queue
-  redis_dead_letter_key: a2a:dead_letter
 
-a2a:
-  worker_poll_seconds: 1
-  max_retry: 3
+model:
+  provider: ${AGENT_MODEL_PROVIDER}
+  base_url: https://dashscope.aliyuncs.com/compatible-mode/v1
+  api_key: ${DASHSCOPE_API_KEY}
+  default_model: qwen3-max
+  lightweight_model: qwen-plus
+  max_tokens: 4096
+  max_turns: 8
+  request_timeout_seconds: 90
+  retry:
+    max_retries: 3
+    base_delay_seconds: 1
+    max_delay_seconds: 30
+  auto_compact_threshold_tokens: 20000
+  preserve_recent_messages: 6
 
-orchestrator:
-  max_parallel_capabilities: 4
-  model_route_policy: balanced
+skills:
+  max_selected: 3
+  skill_dirs:
+    - skills
+
+session:
+  recent_message_limit: 12
+  memory_limit: 5
+
+web:
+  allowed_origins:
+    - http://127.0.0.1:3000
+    - http://localhost:3000
 
 governance:
   rate_limit_per_minute: 120
@@ -27,6 +47,22 @@ observability:
   enable_otlp: false
   otlp_endpoint: ${OTLP_ENDPOINT}
   otlp_insecure: true
+
+permissions:
+  mode: default
+  allowed_tools: []
+  denied_tools: []
+  denied_commands:
+    - "*rm -rf /*"
+    - "*Remove-Item* -Recurse*"
+  sensitive_paths:
+    - "*/.ssh/*"
+    - "*/.aws/*"
+    - "*/.kube/*"
+
+hooks:
+  pre_tool_use: []
+  post_tool_use: []
 
 cost:
   input_token_ratio: 4

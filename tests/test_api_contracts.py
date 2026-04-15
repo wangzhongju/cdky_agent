@@ -1,22 +1,37 @@
-﻿from enterprise.api.schemas import ChatStreamRequest, TaskCreateRequest, SkillPatchRequest
-from enterprise.a2a.protocol import A2ATaskPayload
+from enterprise.api.schemas import (
+    ApprovalDecisionRequest,
+    SessionCreateRequest,
+    SessionMessageRequest,
+    UserCreateRequest,
+    UserUpdateRequest,
+)
 
 
-def test_chat_stream_request_schema():
-    req = ChatStreamRequest(message="你好")
-    assert req.message == "你好"
+def test_session_create_schema():
+    req = SessionCreateRequest(title="demo", user_id="1001", metadata={"user_id": "1001"})
+    assert req.title == "demo"
+    assert req.user_id == "1001"
+    assert req.metadata["user_id"] == "1001"
 
 
-def test_task_create_request_schema():
-    req = TaskCreateRequest(goal="生成报告")
-    assert req.goal == "生成报告"
+def test_session_message_schema():
+    req = SessionMessageRequest(message="hello", resume=False)
+    assert req.message == "hello"
+    assert req.resume is False
 
 
-def test_skill_patch_request_schema():
-    req = SkillPatchRequest(enabled=False)
-    assert req.enabled is False
+def test_approval_decision_schema():
+    req = ApprovalDecisionRequest(approved=True)
+    assert req.approved is True
 
 
-def test_a2a_payload_required_fields():
-    payload = A2ATaskPayload(task_id="t1", goal="g", trace_id="trace")
-    assert payload.status.value == "PENDING"
+def test_user_create_schema():
+    req = UserCreateRequest(username="demo", display_name="Demo User", preferences={"theme": "light"})
+    assert req.username == "demo"
+    assert req.display_name == "Demo User"
+    assert req.preferences["theme"] == "light"
+
+
+def test_user_update_schema():
+    req = UserUpdateRequest(display_name="Renamed")
+    assert req.display_name == "Renamed"

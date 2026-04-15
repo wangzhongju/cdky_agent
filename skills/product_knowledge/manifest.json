@@ -1,0 +1,6 @@
+{
+  "id": "product_knowledge",
+  "name": "product_knowledge",
+  "description": "General robot product knowledge and troubleshooting guidance.",
+  "enabled": true
+}

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Callable
 
-from enterprise.capability.types import Capability
+from enterprise.mcp.capability import Capability
 from enterprise.mcp.models import MCPTool
 
 

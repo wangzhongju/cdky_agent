@@ -1,0 +1,6 @@
+{
+  "id": "report",
+  "name": "report",
+  "description": "Generate personal usage reports from structured robot usage data.",
+  "enabled": true
+}

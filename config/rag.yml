@@ -1,3 +1,0 @@
-chat_model_name: qwen3-max
-lightweight_chat_model_name: qwen-plus
-embedding_model_name: text-embedding-v4

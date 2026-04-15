@@ -1,199 +1,135 @@
-﻿# 企业级 Agent 详细介绍与使用流程
+# Agent Enterprise Guide
 
-## 1. 项目定位
+## 架构概览
 
-该项目是一个面向企业场景的多能力智能体系统，目标是将传统单体 ReAct Agent 升级为：
+当前工程已经从旧 `ReAct + rag + agent.tools` 迁移为会话型 Agent 系统。主 UI 是独立的 Next.js Web 应用，后端以 FastAPI `v2` API 为统一入口，核心执行链路集中在 `enterprise/`。
 
-- 能力层：Skills + MCP 统一能力管理
-- 编排层：LangGraph 主图路由与策略控制
-- 协作层：A2A 任务协议、队列、状态机与重试恢复
+```mermaid
+flowchart LR
+    UI["Next.js Web\n/frontend"] --> API["FastAPI API\n/enterprise/api/app.py"]
+    API --> GOV["治理中间件\nrate_limit / audit / tracing / metrics"]
+    GOV --> SESSION["SessionService\n/enterprise/session/service.py"]
+    SESSION --> USERS["UserRepository\n/enterprise/storage/user_repository.py"]
+    SESSION --> SKILL["SkillService\n/enterprise/skills/service.py"]
+    SESSION --> MEMORY["MemoryService\n/enterprise/memory/service.py"]
+    SESSION --> ENGINE["QueryEngine\n/enterprise/engine/query_engine.py"]
 
-系统默认采用 API-first 架构，Streamlit 作为前端客户端调用 API。
+    ENGINE --> MODEL["DashScope OpenAI Client\n/enterprise/model/client.py"]
+    ENGINE --> TOOLS["ToolRegistry + Core Tools\n/enterprise/tools"]
+    ENGINE --> PERM["PermissionChecker\n/enterprise/permissions/checker.py"]
+    ENGINE --> HOOKS["HooksExecutor\n/enterprise/hooks/executor.py"]
+    ENGINE --> COST["CostTracker\n/enterprise/engine/cost_tracker.py"]
 
-## 2. 架构全景
+    SESSION --> STORE["Repositories\n/enterprise/storage"]
+    MEMORY --> STORE
+    SKILL --> STORE
+    COST --> STORE
 
-请求主链路：
-
-1. 用户请求进入 `POST /v1/chat/stream`
-2. API 中间件完成限流、审计、trace 注入、指标采集
-3. Orchestrator 按意图进入 LangGraph 主图
-4. Capability Gateway 统一调度本地 Skill 与 MCP 能力
-5. Reviewer/Responder 聚合结果并输出
-
-异步任务链路：
-
-1. `POST /v1/tasks` 提交任务
-2. Redis 队列消费任务
-3. A2A Runtime 执行 `PENDING -> RUNNING -> REVIEWING -> COMPLETED/FAILED`
-4. 任务状态落库 Postgres，可通过 `GET /v1/tasks/{task_id}` 追踪
-
-## 3. 核心能力说明
-
-### 3.1 Skills
-
-- manifest 驱动注册，支持启停、热重载、版本化
-- 核心字段：`id,name,version,entrypoint,tool_schemas,required_permissions,dependencies,enabled`
-- 接口：
-  - `GET /v1/skills`
-  - `PATCH /v1/skills/{skill_id}`
-
-### 3.2 MCP
-
-- 统一挂载到 `CapabilityGateway`
-- 支持：超时、重试、熔断、降级
-- 同名能力通过 `namespace.tool` 规避冲突
-- 支持协议层热重载与状态查询：
-  - `GET /v1/mcp/servers`
-  - `POST /v1/mcp/reload`
-
-### 3.3 LangGraph 编排
-
-固定主图节点：
-
-- `IntentClassifier -> Planner -> CapabilityRouter -> Executor -> Reviewer -> Responder`
-
-报告场景强约束子流程：
-
-- `get_user_id -> get_current_month -> fill_context -> fetch_external_data -> report_writer`
-
-### 3.4 A2A 协议
-
-协议字段：
-
-- `task_id,parent_task_id,goal,constraints,context_ref,input,result,status,error,retry_count,trace_id,created_at,updated_at`
-
-状态机：
-
-- `PENDING -> RUNNING -> REVIEWING -> COMPLETED/FAILED`
-
-## 4. 治理能力（阶段二）
-
-### 4.1 可观测
-
-- OpenTelemetry tracing（可选 OTLP 上报）
-- Prometheus 指标导出：`GET /metrics`
-- 运行态快照：`GET /v1/metrics`
-
-### 4.2 审计
-
-- API 调用审计
-- Capability 调用审计
-- A2A 任务审计
-- 落库表：`audit_events`
-
-### 4.3 成本与策略
-
-- 模型路由策略：`balanced / cost_preferred / quality_preferred`
-- 成本估算：按输入输出 token 比例与单价模型估算
-- 落库表：`cost_records`
-
-### 4.4 安全与配额
-
-- `x-api-key` 作为租户/调用方标识
-- 每分钟限流 + 每日配额
-- `x-trace-id` 全链路透传
-
-## 5. 快速启动流程
-
-### 5.1 准备环境变量
-
-在 `docker/.env` 中配置：
-
-```bash
-DASHSCOPE_API_KEY=your_dashscope_api_key
-GAODE_MCP_KEY=your_gaode_key
-DATABASE_URL=postgresql+psycopg://agent:agent@postgres:5432/agent
-REDIS_URL=redis://redis:6379/0
+    TOOLS --> MCP["Gaode MCP-style Tools\nweather / location"]
+    TOOLS --> BIZ["Report Data Tools\nusage report queries"]
+    STORE --> DB["Postgres"]
+    STORE --> REDIS["Redis"]
 ```
 
-可选 OTLP：
+## 聊天与工具调用链路
 
-```bash
-OTLP_ENDPOINT=http://otel-collector:4317
+```mermaid
+sequenceDiagram
+    participant U as 用户
+    participant W as Next.js Web
+    participant A as FastAPI
+    participant G as 治理中间件
+    participant SS as SessionService
+    participant KS as SkillService
+    participant MS as MemoryService
+    participant QE as QueryEngine
+    participant MC as ModelClient
+    participant TR as ToolRegistry
+    participant DB as Postgres/Redis
+
+    U->>W: 输入消息
+    W->>A: POST /v2/sessions/{id}/messages/stream
+    A->>G: 限流 / 审计 / tracing / metrics
+    G->>SS: 进入会话服务
+    SS->>KS: 选择并懒加载 skills
+    SS->>MS: 检索持久化记忆
+    SS->>DB: 读取会话摘要与历史消息
+    SS->>QE: 组装上下文并启动查询循环
+
+    loop 直到模型停止调用工具
+        QE->>MC: 流式请求模型
+        MC-->>QE: 文本增量 / tool call / usage
+        alt 需要工具
+            QE->>TR: 执行一个或多个工具
+            TR->>QE: tool result
+        else 直接回答
+            QE-->>SS: assistant 文本与 usage
+        end
+    end
+
+    SS->>DB: 持久化消息 / 审批 / 记忆 / 成本
+    SS-->>A: SSE 事件流
+    A-->>W: assistant_text_delta / tool events / approval_required
+    W-->>U: 渲染消息、状态和审批弹窗
 ```
 
-并在 `config/enterprise.yml` 开启：
+## 审批挂起与恢复
 
-```yaml
-observability:
-  enable_otlp: true
-  otlp_endpoint: ${OTLP_ENDPOINT}
-  otlp_insecure: true
+```mermaid
+sequenceDiagram
+    participant QE as QueryEngine
+    participant PC as PermissionChecker
+    participant DB as PendingApprovalRepository
+    participant API as FastAPI
+    participant UI as Next.js Web
+
+    QE->>PC: 检查 write_file / bash / edit_file
+    PC-->>QE: 需要审批
+    QE->>DB: 创建 pending approval
+    QE-->>API: approval_required 事件
+    API-->>UI: SSE 推送审批事件
+    UI->>API: POST /v2/approvals/{id}/decision
+    UI->>API: POST /v2/sessions/{id}/messages/stream {resume: true}
+    API-->>QE: 恢复执行
+    QE-->>UI: 返回工具结果和最终回复
 ```
 
-### 5.2 启动
+## 模块职责
 
-```bash
-docker compose -f docker/docker-compose-dev.yaml up -d --build
+- `frontend/`：Next.js + React + TypeScript Web UI，支持用户、会话、流式聊天和审批弹窗。
+- `enterprise/api`：提供 `/v2/users`、`/v2/sessions`、`/v2/tools`、`/v2/skills`、`/v2/approvals` 等接口。
+- `enterprise/session`：管理用户会话、消息历史、摘要、审批恢复和标题生成。
+- `enterprise/engine`：负责消息模型、SSE 事件、流式工具调用循环和成本累计。
+- `enterprise/model`：封装 DashScope OpenAI 兼容模型调用、重试和 usage 捕获。
+- `enterprise/tools`：提供文件、检索、网页、高德天气/定位、报告数据等工具。
+- `enterprise/skills`：负责 skill manifest 索引、模型选择和 `SKILL.md` 懒加载。
+- `enterprise/memory`：负责持久化记忆提取与检索。
+- `enterprise/governance`：提供限流、审计、Tracing、Prometheus 指标和成本落库。
+- `enterprise/storage`：提供 Postgres 与 Redis 仓储访问。
+
+## 当前接口
+
+- `POST /v2/users`
+- `GET /v2/users`
+- `GET /v2/users/{user_id}`
+- `PATCH /v2/users/{user_id}`
+- `POST /v2/sessions`
+- `GET /v2/sessions?user_id=...`
+- `GET /v2/sessions/{session_id}`
+- `GET /v2/sessions/{session_id}/messages`
+- `POST /v2/sessions/{session_id}/messages/stream`
+- `GET /v2/skills`
+- `GET /v2/tools`
+- `GET /v2/approvals?status=pending`
+- `POST /v2/approvals/{approval_id}/decision`
+- `GET /healthz`
+- `GET /metrics`
+- `GET /v1/metrics`
+
+## Docker 验证
+
+```powershell
+docker compose --project-directory . -f docker/docker-compose-dev.yaml up -d --build
+docker exec cdky-agent-api sh -lc 'cd /app && PYTHONPATH=/app pytest -q'
+docker run --rm -v D:\work\cdky_agent\frontend:/app -w /app node:20-alpine sh -lc "npm ci && npm test && npm run build"
 ```
-
-### 5.3 健康检查
-
-```bash
-curl "http://127.0.0.1:8000/healthz?deep=true"
-```
-
-### 5.4 调用示例
-
-流式聊天：
-
-```bash
-curl -N -X POST "http://127.0.0.1:8000/v1/chat/stream" \
-  -H "Content-Type: application/json" \
-  -H "x-api-key: demo-tenant" \
-  -H "x-trace-id: trace-demo-001" \
-  -d '{"message":"请给我一份扫地机器人保养建议"}'
-```
-
-提交任务：
-
-```bash
-curl -X POST "http://127.0.0.1:8000/v1/tasks" \
-  -H "Content-Type: application/json" \
-  -H "x-api-key: demo-tenant" \
-  -d '{"goal":"给我生成我的使用报告","constraints":{},"context_ref":{"session_id":"s1"},"input":{}}'
-```
-
-查询任务：
-
-```bash
-curl "http://127.0.0.1:8000/v1/tasks/<task_id>" -H "x-api-key: demo-tenant"
-```
-
-查看 Prometheus 指标：
-
-```bash
-curl "http://127.0.0.1:8000/metrics"
-```
-
-## 6. 完整测试流程
-
-容器内执行：
-
-```bash
-docker exec -w /app -e PYTHONPATH=/app cdky-agent-api \
-  pytest -q tests/test_api_contracts.py tests/test_functional_api.py
-```
-
-预期：全部通过。
-
-## 7. 常见排查
-
-1. `/healthz?deep=true` 返回 503
-- 先检查 `postgres/redis` 容器是否 `Up`
-- 再检查 `DATABASE_URL/REDIS_URL` 是否正确
-
-2. `429 rate limit exceeded`
-- 提升 `config/enterprise.yml` 中限流阈值
-- 或更换调用方 `x-api-key`
-
-3. `OTLP 无上报`
-- 确认 `enable_otlp=true`
-- 确认 `OTLP_ENDPOINT` 可达且端口正确
-
-## 8. 生产化建议
-
-- 对 `x-api-key` 接入真实鉴权（JWT/API Gateway）
-- 将 `/metrics` 纳入 Prometheus 抓取并配置告警
-- 将 trace 输出到集中式 APM（Jaeger/Tempo/OTel Collector）
-- 按租户做成本预算和配额告警

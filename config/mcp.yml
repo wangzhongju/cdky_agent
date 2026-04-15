@@ -1,41 +1,10 @@
-﻿servers:
+servers:
   - id: gaode
     namespace: gaode
     enabled: true
+    base_url: https://restapi.amap.com
+    api_key: ${GAODE_MCP_KEY}
     timeout_seconds: 5
     max_retries: 2
     failure_threshold: 5
     reset_seconds: 30
-  - id: enterprise_data
-    namespace: enterprise
-    enabled: true
-    timeout_seconds: 5
-    max_retries: 2
-    failure_threshold: 5
-    reset_seconds: 30
-  - id: web_fetch_local
-    namespace: web
-    transport: local
-    server_type: web_fetch
-    enabled: true
-    timeout_seconds: 8
-    max_retries: 1
-    failure_threshold: 3
-    reset_seconds: 15
-    protocol_version: "2025-11-25"
-    options:
-      max_response_bytes: 1000000
-      default_max_chars: 4000
-  - id: skills_bridge
-    namespace: skillbridge
-    transport: local
-    server_type: skill_bridge
-    enabled: true
-    timeout_seconds: 5
-    max_retries: 0
-    failure_threshold: 5
-    reset_seconds: 10
-    protocol_version: "2025-11-25"
-    skill_whitelist:
-      - knowledge.rag_summarize
-      - knowledge.webpage_brief

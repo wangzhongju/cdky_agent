@@ -9,8 +9,6 @@ from utils.config_handler import enterprise_conf
 
 
 class RateLimitService:
-    """用粗粒度的租户级限流保护 API 调用。"""
-
     def __init__(self):
         self.redis = get_redis_client()
         gov = enterprise_conf.get("governance", {})
@@ -18,7 +16,6 @@ class RateLimitService:
         self.daily_quota = int(gov.get("daily_quota", 2000))
 
     def check(self, actor: str) -> None:
-        """递增用量计数，并在超过阈值时抛出异常。"""
         now = int(time.time())
         minute_bucket = now // 60
         day_bucket = now // 86400

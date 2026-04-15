@@ -48,6 +48,6 @@ RUN /opt/venv/bin/pip install -r /tmp/requirements.txt     && rm -f /tmp/require
 
 USER ${DOCKER_USERS}
 
-EXPOSE 8501 8000
+EXPOSE 8000
 
-CMD ["python", "-m", "streamlit", "run", "app.py", "--server.address=0.0.0.0", "--server.port=8501"]
+CMD ["python", "api_server.py"]

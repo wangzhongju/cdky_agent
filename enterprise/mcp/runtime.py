@@ -4,15 +4,17 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
+import asyncio
+from pathlib import Path
 from typing import Any, Callable
 
-from agent.tools.agent_tools import fetch_external_data, get_user_location, get_weather
-from enterprise.capability.mcp.circuit_breaker import CircuitBreaker
-from enterprise.capability.types import Capability
+from enterprise.mcp.capability import Capability, CircuitBreaker
 from enterprise.mcp.client import LocalMCPClient, MCPClient, StdioMCPClient, StreamableHTTPMCPClient
 from enterprise.mcp.config import parse_mcp_servers
 from enterprise.mcp.models import MCPServerConfig, MCPServerStatus, MCPTool
 from enterprise.mcp.servers import SkillBridgeMCPServer, WebFetchMCPServer
+from enterprise.tools.base import ToolExecutionContext
+from enterprise.tools.core import create_default_tool_registry
 from utils.config_handler import mcp_conf
 from utils.logger_handler import logger
 
@@ -183,14 +185,14 @@ class MCPRuntime:
                 name="get_weather",
                 description="Gaode weather MCP (legacy compatibility)",
                 schema={"city": "string"},
-                call=lambda city: get_weather.invoke({"city": city}),
+                call=lambda city: _execute_current_tool("mcp__gaode__get_weather", {"city": city}),
             )
             self._register_legacy_capability(
                 cfg=cfg,
                 name="get_user_location",
                 description="Gaode location MCP (legacy compatibility)",
                 schema={},
-                call=lambda: get_user_location.invoke({}),
+                call=lambda: _execute_current_tool("mcp__gaode__get_user_location", {}),
             )
             count = 2
         elif cfg.id == "enterprise_data":
@@ -199,7 +201,10 @@ class MCPRuntime:
                 name="fetch_external_data",
                 description="Enterprise data MCP (legacy compatibility)",
                 schema={"user_id": "string", "month": "string"},
-                call=lambda user_id, month: fetch_external_data.invoke({"user_id": user_id, "month": month}),
+                call=lambda user_id, month: _execute_current_tool(
+                    "get_usage_report_data",
+                    {"user_id": user_id, "month": month},
+                ),
             )
             count = 1
         else:
@@ -248,3 +253,22 @@ class MCPRuntime:
             schema=schema,
             handler=handler,
         )
+
+
+def _execute_current_tool(name: str, arguments: dict[str, Any]) -> str:
+    async def run() -> str:
+        registry = create_default_tool_registry()
+        tool = registry.get(name)
+        if tool is None:
+            raise KeyError(f"tool not found: {name}")
+        parsed = tool.input_model(**arguments)
+        result = await tool.execute(parsed, ToolExecutionContext(cwd=Path.cwd()))
+        if result.is_error:
+            raise RuntimeError(result.output)
+        return result.output
+
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return asyncio.run(run())
+    raise RuntimeError("legacy MCP sync invocation is not available inside a running event loop")

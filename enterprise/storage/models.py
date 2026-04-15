@@ -1,73 +1,97 @@
-﻿from datetime import datetime
+from __future__ import annotations
+
+from datetime import datetime
+
+from sqlalchemy import Boolean, DateTime, Integer, String, Text
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
-from sqlalchemy import String, Text, Boolean, Integer, DateTime
 
 
 class Base(DeclarativeBase):
-    """所有 ORM 模型的基类。"""
-
     pass
 
 
-class SkillRecord(Base):
-    """技能 manifest 及其启用状态的持久化视图。"""
+class SkillManifestRecord(Base):
+    __tablename__ = "skill_manifests"
 
-    __tablename__ = "skill_registry"
-
-    id: Mapped[str] = mapped_column(String(100), primary_key=True)
+    id: Mapped[str] = mapped_column(String(120), primary_key=True)
     name: Mapped[str] = mapped_column(String(200), nullable=False)
-    version: Mapped[str] = mapped_column(String(50), nullable=False)
-    entrypoint: Mapped[str] = mapped_column(String(255), nullable=False)
-    tool_schemas: Mapped[str] = mapped_column(Text, nullable=False)
-    required_permissions: Mapped[str] = mapped_column(Text, nullable=False)
-    dependencies: Mapped[str] = mapped_column(Text, nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    path: Mapped[str] = mapped_column(String(500), nullable=False)
+    manifest_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
 
 
-class TaskRecord(Base):
-    """异步 A2A 任务状态机对应的持久化记录。
+class UserRecord(Base):
+    __tablename__ = "users"
 
-    这是 ``A2ATaskPayload`` 在数据库中的落地形态：
-    - 面向存储层，JSON 结构字段采用 ``Text`` 列保存序列化文本
-    - 面向运行时，``task_id`` 作为全局查询主键
-    - 面向治理层，保留 ``trace_id`` 与 ``retry_count`` 便于排障与统计
-    """
+    user_id: Mapped[str] = mapped_column(String(120), primary_key=True)
+    username: Mapped[str] = mapped_column(String(120), nullable=False, unique=True, index=True)
+    display_name: Mapped[str] = mapped_column(String(200), nullable=False)
+    note: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    default_model: Mapped[str] = mapped_column(String(120), nullable=False, default="")
+    preferences_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
 
-    __tablename__ = "a2a_tasks"
 
-    # 主键：任务唯一标识。
-    task_id: Mapped[str] = mapped_column(String(100), primary_key=True)
-    # 可选父任务 ID，用于未来子任务编排扩展。
-    parent_task_id: Mapped[str] = mapped_column(String(100), nullable=True)
-    # 人类可读的任务目标文本。
-    goal: Mapped[str] = mapped_column(Text, nullable=False)
-    # JSON 文本：任务执行约束。
-    constraints: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
-    # JSON 文本：上下文引用（如 session_id）。
-    context_ref: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
-    # JSON 文本：结构化输入参数。
-    input: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
-    # JSON 文本：执行结果输出。
-    result: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
-    # 生命周期状态值（PENDING/RUNNING/...）。
-    status: Mapped[str] = mapped_column(String(20), nullable=False)
-    # 错误文本，仅失败路径使用。
-    error: Mapped[str] = mapped_column(Text, nullable=False, default="")
-    # 重试次数计数器。
-    retry_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    # 链路追踪标识。
-    trace_id: Mapped[str] = mapped_column(String(100), nullable=False)
-    # task_id + goal 的稳定哈希，用于目标指纹标识。
-    goal_hash: Mapped[str] = mapped_column(String(128), nullable=False)
-    # 行创建/更新时间。
+class SessionRecord(Base):
+    __tablename__ = "sessions"
+
+    session_id: Mapped[str] = mapped_column(String(120), primary_key=True)
+    user_id: Mapped[str] = mapped_column(String(120), nullable=True, index=True)
+    title: Mapped[str] = mapped_column(String(200), nullable=False, default="")
+    model_name: Mapped[str] = mapped_column(String(120), nullable=False)
+    system_prompt: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    summary: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    metadata_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    status: Mapped[str] = mapped_column(String(40), nullable=False, default="ACTIVE")
+    pending_approval_id: Mapped[str] = mapped_column(String(120), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
+
+
+class SessionMessageRecord(Base):
+    __tablename__ = "session_messages"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    session_id: Mapped[str] = mapped_column(String(120), nullable=False, index=True)
+    role: Mapped[str] = mapped_column(String(20), nullable=False)
+    content_json: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
+
+
+class PendingApprovalRecord(Base):
+    __tablename__ = "pending_approvals"
+
+    approval_id: Mapped[str] = mapped_column(String(120), primary_key=True)
+    session_id: Mapped[str] = mapped_column(String(120), nullable=False, index=True)
+    tool_name: Mapped[str] = mapped_column(String(120), nullable=False)
+    tool_use_id: Mapped[str] = mapped_column(String(120), nullable=False)
+    tool_input_json: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[str] = mapped_column(String(40), nullable=False, default="pending")
+    reason: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    actor: Mapped[str] = mapped_column(String(200), nullable=False, default="anonymous")
+    trace_id: Mapped[str] = mapped_column(String(120), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
+
+
+class MemoryEntryRecord(Base):
+    __tablename__ = "memory_entries"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[str] = mapped_column(String(120), nullable=True, index=True)
+    session_id: Mapped[str] = mapped_column(String(120), nullable=True, index=True)
+    memory_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    title: Mapped[str] = mapped_column(String(200), nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    tags_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
 
 
 class AuditEventRecord(Base):
-    """只追加不修改的审计日志记录。"""
-
     __tablename__ = "audit_events"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -83,8 +107,6 @@ class AuditEventRecord(Base):
 
 
 class CostRecord(Base):
-    """按请求记录的模型成本估算数据。"""
-
     __tablename__ = "cost_records"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)

@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 
 from enterprise.capability.skills.context import SkillContext
-from enterprise.capability.types import Capability
+from enterprise.mcp.capability import Capability
 
 _URL_RE = re.compile(r"https?://[^\s]+", re.IGNORECASE)
 

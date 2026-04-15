@@ -24,8 +24,12 @@ packages/
 *.mp4
 *.log
 docker/.env
+.env
 
 # runtime generated
 .pytest_cache/
 logs/
 chroma_db/
+frontend/node_modules/
+frontend/.next/
+tmp_test.txt
